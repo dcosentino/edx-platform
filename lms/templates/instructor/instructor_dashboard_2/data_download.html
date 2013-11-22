@@ -33,7 +33,7 @@
 
     <p>${_("The report is generated in the background, meaning it is OK to navigate away from this page while your report is generating. Generated reports appear in a table below and can be downloaded.")}</p>
 
-    <div class="request-response msg msg-confirm copy"></div>
+    <div class="request-response msg msg-confirm copy" id="request-response"></div>
     <div class="request-response-error msg msg-warning copy"></div>
     <br>
 
@@ -42,7 +42,7 @@
 
     <p><b>${_("Reports Available for Download")}</b></p>
     <p>${_("File links are generated on demand and expire within 5 minutes due to the sensitive nature of student grade information. Please note that the report filename contains a timestamp that represents when your file was generated; this timestamp is UTC, not your local timezone.")}</p><br>
-    <div class="grade-downloads-table" data-endpoint="${ section_data['list_grade_downloads_url'] }" ></div>
+    <div class="grade-downloads-table" id="grade-downloads-table" data-endpoint="${ section_data['list_grade_downloads_url'] }" ></div>
   </div>
 %endif
 

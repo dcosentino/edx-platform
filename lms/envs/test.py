@@ -36,6 +36,11 @@ MITX_FEATURES['ENABLE_INSTRUCTOR_BETA_DASHBOARD'] = True
 
 MITX_FEATURES['ENABLE_SHOPPING_CART'] = True
 
+# Enable this feature for course staff grade downloads, to enable acceptance tests
+# (presumably, we'll shortly enable this in prod and remove this feature flag)
+MITX_FEATURES['ENABLE_S3_GRADE_DOWNLOADS'] = True
+MITX_FEATURES['ALLOW_COURSE_STAFF_GRADE_DOWNLOADS'] = True
+
 # Need wiki for courseware views to work. TODO (vshnayder): shouldn't need it.
 WIKI_ENABLED = True
 

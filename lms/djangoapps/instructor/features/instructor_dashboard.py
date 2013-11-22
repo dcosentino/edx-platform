@@ -1,5 +1,5 @@
 """
-Define steps for bulk email acceptance test.
+Define steps for instructor dashboard acceptance test.
 """
 
 #pylint: disable=C0111
@@ -7,9 +7,47 @@ Define steps for bulk email acceptance test.
 
 from lettuce import world, step
 from lettuce.django import mail
-from nose.tools import assert_in, assert_true, assert_equal  # pylint: disable=E0611
+from nose.tools import assert_in, assert_true, assert_equal, assert_regexp_matches  # pylint: disable=E0611
 from django.core.management import call_command
 from django.conf import settings
+from terrain.steps import reload_the_page
+
+
+def go_to_section(section_name):
+    # section name should be one of
+    # course_info, membership, student_admin, data_download, analytics
+    world.visit('/courses/edx/999/Test_Course')
+    world.css_click('a[href="/courses/edx/999/Test_Course/instructor"]')
+    world.css_click('div.beta-button-wrapper>a')
+    world.css_click('a[data-section="{0}"]'.format(section_name))
+
+@step(u"I click 'Generate Grade Report'")
+def click_generate_grade_report(step):
+    # Go to the data download section of the instructor dash
+    go_to_section("data_download")
+
+    # Click generate grade report button
+    world.css_click('input[name="calculate-grades-csv"]')
+
+    # Expect to see a message that grade report is being generated
+    expected_msg = "Your grade report is being generated! You can view the status of the generation task in the 'Pending Instructor Tasks' section."
+    world.wait_for_visible('#request-response')
+    assert_in(
+        expected_msg, world.css_text('#request-response'),
+        msg="Could not find grade report generation success message."
+    )
+
+@step(u"I see a csv file in the grade reports table")
+def find_grade_report_csv_link(step):
+    # Need to reload the page to see the grades download table
+    reload_the_page(step)
+    world.wait_for_visible('#grade-downloads-table')
+    # Find table and assert a .csv file is present
+    expected_file_regexp = 'edx_999_Test_Course_grade_report_\d{4}-\d{2}-\d{2}-\d{4}\.csv'
+    assert_regexp_matches(
+        world.css_html('#grade-downloads-table'), expected_file_regexp,
+        msg="Expected grade report filename was not found."
+    )
 
 
 @step(u'Given I am "([^"]*)" for a course')
