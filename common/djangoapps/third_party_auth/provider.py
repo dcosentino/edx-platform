@@ -149,6 +149,24 @@ class LinkedInOauth2(BaseProvider):
     def get_name(cls, provider_details):
         return provider_details.get('fullname')
 
+class PolimiOauth2(BaseProvider):
+    """Provider for Polimi Oauth2 auth system."""
+
+    BACKEND_CLASS = polimibackend.PolimiOAuth2Backend
+    ICON_CLASS = 'icon-polimi-oauth'
+    NAME = 'Polimi'
+    SETTINGS = {
+        'SOCIAL_AUTH_POLIMI_OAUTH2_KEY': None,
+        'SOCIAL_AUTH_POLIMI_OAUTH2_SECRET': None,
+    }
+
+    @classmethod
+    def get_email(cls, provider_details):
+        return provider_details.get('email')
+
+    @classmethod
+    def get_name(cls, provider_details):
+        return provider_details.get('fullname')
 
 class PolimiOauth2(BaseProvider):
     """Provider for PolimiOauth2 based on Google's Oauth2 auth system."""
