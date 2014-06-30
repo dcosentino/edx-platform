@@ -22,7 +22,7 @@ def get_visible_courses():
 
     # this is legacy format which is outside of the microsite feature -- also handle dev case, which should not filter
     if hasattr(settings, 'COURSE_LISTINGS') and subdomain in settings.COURSE_LISTINGS and not settings.DEBUG:
-        filtered_visible_ids = frozenset(settings.COURSE_LISTINGS[subdomain])
+        filtered_visible_ids = frozenset([SlashSeparatedCourseKey.from_deprecated_string(c) for c in settings.COURSE_LISTINGS[subdomain]])
 
     filtered_by_org = microsite.get_value('course_org_filter')
 
