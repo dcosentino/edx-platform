@@ -2,8 +2,8 @@ from xmodule.modulestore.django import modulestore
 from xmodule.course_module import CourseDescriptor
 from django.conf import settings
 
+from opaque_keys.edx.locations import SlashSeparatedCourseKey
 from microsite_configuration import microsite
-
 
 def get_visible_courses():
     """
