@@ -194,8 +194,8 @@ class ECOOpenId(BaseProvider):
     ICON_CLASS = 'icon-eco-oauth'
     NAME = 'Eco'
     SETTINGS = {
-        'SOCIAL_AUTH_ECO_OAUTH2_KEY': None,
-        'SOCIAL_AUTH_ECO_OAUTH2_SECRET': None,
+        'SOCIAL_AUTH_ECOOPENID_AUTH_KEY': None,
+        'SOCIAL_AUTH_ECOOPENID_AUTH_SECRET': None,
     }
 
     @classmethod
