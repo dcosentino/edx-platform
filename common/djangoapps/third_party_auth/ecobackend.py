@@ -21,6 +21,15 @@ class ECOOpenIdBackend(google.GoogleOAuth2):
                 ('{0}:{1}'.format(*self.get_key_and_secret()).encode())
             ))
     }
+        
+    def get_user_details(self, response):
+        """Return user details from ECO account"""
+        email=response.get['email']
+        return {'username': email.split('@', 1)[0],
+            'email': email,
+            'fullname': response.get['name'],
+            'first_name': response.get['given_name'],
+            'last_name': response.get['family_name']}
 
     def get_user_id(self, details, response):
         """Use sub as unique id"""
