@@ -5,7 +5,7 @@ invoke the Django armature.
 """
 
 from social.backends import google, linkedin
-from . import polimibackend
+from . import polimibackend, ecobackend
 _DEFAULT_ICON_CLASS = 'icon-signin'
 
 
@@ -186,6 +186,26 @@ class PolimiOauth2(BaseProvider):
     @classmethod
     def get_name(cls, provider_details):
         return provider_details.get('fullname')
+
+class ECOOpenId(BaseProvider):
+    """Provider for ECOOpenId auth system."""
+
+    BACKEND_CLASS = ecobackend.ECOOpenIdBackend
+    ICON_CLASS = 'icon-eco-oauth'
+    NAME = 'Eco'
+    SETTINGS = {
+        'SOCIAL_AUTH_ECO_OAUTH2_KEY': None,
+        'SOCIAL_AUTH_ECO_OAUTH2_SECRET': None,
+    }
+
+    @classmethod
+    def get_email(cls, provider_details):
+        return provider_details.get('email')
+
+    @classmethod
+    def get_name(cls, provider_details):
+        return provider_details.get('fullname')
+
 
 class Registry(object):
     """Singleton registry of third-party auth providers.
