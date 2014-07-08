@@ -371,7 +371,7 @@ class DraftModuleStore(MongoModuleStore):
                     raise
 
         xblock.location = draft_loc
-        super(DraftModuleStore, self).update_item(xblock, user_id, allow_not_found, isPublish)
+        super(DraftModuleStore, self).update_item(xblock, user_id, allow_not_found, isPublish=isPublish)
         return wrap_draft(xblock)
 
     def delete_item(self, location, user_id, revision=None, **kwargs):
@@ -409,6 +409,14 @@ class DraftModuleStore(MongoModuleStore):
 
         # remove subtree from its parent
         parent_locations = self._get_raw_parent_locations(location, key_revision=parent_revision)
+        # if no parents, then we're trying to delete something which we should convert to draft
+        if not parent_locations:
+            # find the published parent, convert it to draft, then manipulate the draft
+            parent_locations = self._get_raw_parent_locations(location, key_revision=MongoRevisionKey.published)
+            # parent_locations will still be empty if the object was an orphan
+            if parent_locations:
+                draft_parent = self.convert_to_draft(parent_locations[0], user_id)
+                parent_locations = [draft_parent.location]
         # there could be 2 parents if
         #   Case 1: the draft item moved from one parent to another
         #   Case 2: revision==ModuleStoreEnum.RevisionOption.all and the single parent has 2 versions: draft and published
@@ -493,27 +501,22 @@ class DraftModuleStore(MongoModuleStore):
 
     def has_changes(self, location):
         """
-        Check if the xblock has been changed since it was last published.
+        Check if the xblock or its children have been changed since the last publish.
         :param location: location to check
         :return: True if the draft and published versions differ
         """
 
-        # Direct only categories can never have changes because they can't have drafts
-        if location.category in DIRECT_ONLY_CATEGORIES:
-            return False
+        item = self.get_item(location)
 
-        draft = self.get_item(location)
-
-        # If the draft was never published, then it clearly has unpublished changes
-        if not draft.published_date:
+        # don't check children if this block has changes (is not public)
+        if self.compute_publish_state(item) != PublishState.public:
             return True
-
-        # edited_on may be None if the draft was last edited before edit time tracking
-        # If the draft does not have an edit time, we play it safe and assume there are differences
-        if draft.edited_on:
-            return draft.edited_on > draft.published_date
+        # if this block doesn't have changes, then check its children
+        elif item.has_children:
+            return any([self.has_changes(child) for child in item.children])
+        # otherwise there are no changes
         else:
-            return True
+            return False
 
     def publish(self, location, user_id):
         """
@@ -533,7 +536,7 @@ class DraftModuleStore(MongoModuleStore):
         # list of published ones.)
         to_be_deleted = []
 
-        def _internal_depth_first(item_location):
+        def _internal_depth_first(item_location, is_root):
             """
             Depth first publishing from the given location
             """
@@ -542,7 +545,7 @@ class DraftModuleStore(MongoModuleStore):
             # publish the children first
             if item.has_children:
                 for child_loc in item.children:
-                    _internal_depth_first(child_loc)
+                    _internal_depth_first(child_loc, False)
 
             if item_location.category in DIRECT_ONLY_CATEGORIES or not getattr(item, 'is_draft', False):
                 # ignore noop attempt to publish something that can't be or isn't currently draft
@@ -566,20 +569,20 @@ class DraftModuleStore(MongoModuleStore):
                             if published_parent == item_location:
                                 # Case 1: child was deleted in draft parent item
                                 # So, delete published version of the child now that we're publishing the draft parent
-                                self._delete_subtree(item_location, [as_published])
+                                self._delete_subtree(orig_child, [as_published])
                             else:
                                 # Case 2: child was moved to a new draft parent item
                                 # So, do not delete the child.  It will be published when the new parent is published.
                                 pass
 
-            super(DraftModuleStore, self).update_item(item, user_id, isPublish=True)
+            super(DraftModuleStore, self).update_item(item, user_id, isPublish=True, is_publish_root=is_root)
             to_be_deleted.append(as_draft(item_location).to_deprecated_son())
 
         # verify input conditions
         self._verify_branch_setting(ModuleStoreEnum.Branch.draft_preferred)
         _verify_revision_is_published(location)
 
-        _internal_depth_first(location)
+        _internal_depth_first(location, True)
         if len(to_be_deleted) > 0:
             self.collection.remove({'_id': {'$in': to_be_deleted}})
         return self.get_item(as_published(location))

@@ -19,7 +19,7 @@ class TestPublish(SplitWMongoCourseBoostrapper):
         # Should be 1 to verify course unique, 11 parent fetches,
         # and n per _create_item where n is the size of the course tree non-leaf nodes
         # for inheritance computation (which is 7*4 + sum(1..4) = 38) (max_finds)
-        with check_mongo_calls(self.draft_mongo, 70, 27):
+        with check_mongo_calls(self.draft_mongo, 71, 27):
             with check_mongo_calls(self.old_mongo, 70, 27):
                 super(TestPublish, self)._create_course(split=False)
 
@@ -63,32 +63,26 @@ class TestPublish(SplitWMongoCourseBoostrapper):
         To reproduce a bug (STUD-811) publish a vertical, convert to draft, delete a child, move a child, publish.
         See if deleted and moved children still is connected or exists in db (bug was disconnected but existed)
         """
-        location = self.old_course_key.make_usage_key('vertical', name='Vert1')
-        item = self.draft_mongo.get_item(location, 2)
+        vert_location = self.old_course_key.make_usage_key('vertical', name='Vert1')
+        item = self.draft_mongo.get_item(vert_location, 2)
         # Vert1 has 3 children; so, publishes 4 nodes which may mean 4 inserts & 1 bulk remove
         # 25-June-2014 find calls are 19. Probably due to inheritance recomputation?
-        with check_mongo_calls(self.draft_mongo, 19, 5):
+        # 02-July-2014 send calls are 7. 5 from above, plus 2 for updating subtree edit info for Chapter1 and course
+        #              find calls are 22. 19 from above, plus 3 for finding the parent of Vert1, Chapter1, and course
+        with check_mongo_calls(self.draft_mongo, 22, 7):
             self.draft_mongo.publish(item.location, self.userid)
 
         # verify status
-        item = self.draft_mongo.get_item(location, 0)
+        item = self.draft_mongo.get_item(vert_location, 0)
         self.assertFalse(getattr(item, 'is_draft', False), "Item was published. Draft should not exist")
         # however, children are still draft, but I'm not sure that's by design
-
-        # convert back to draft
-        self.draft_mongo.convert_to_draft(location, self.userid)
-        # both draft and published should exist
-        draft_vert = self.draft_mongo.get_item(location, 0)
-        self.assertTrue(getattr(draft_vert, 'is_draft', False), "Item was converted to draft but doesn't say so")
-        item = self.old_mongo.get_item(location, 0)
-        self.assertFalse(getattr(item, 'is_draft', False), "Published item doesn't say so")
 
         # delete the draft version of the discussion
         location = self.old_course_key.make_usage_key('discussion', name='Discussion1')
         self.draft_mongo.delete_item(location, self.userid)
 
-        draft_vert = self.draft_mongo.get_item(draft_vert.location, 0)
-        # remove pointer from draft vertical (still there b/c not refetching vert)
+        draft_vert = self.draft_mongo.get_item(vert_location, 0)
+        self.assertTrue(getattr(draft_vert, 'is_draft', False), "Deletion didn't convert parent to draft")
         self.assertNotIn(location, draft_vert.children)
         # move the other child
         other_child_loc = self.old_course_key.make_usage_key('html', name='Html2')
@@ -98,8 +92,8 @@ class TestPublish(SplitWMongoCourseBoostrapper):
         self.draft_mongo.update_item(draft_vert, self.userid)
         self.draft_mongo.update_item(other_vert, self.userid)
         # publish
-        self.draft_mongo.publish(draft_vert.location, self.userid)
-        item = self.old_mongo.get_item(draft_vert.location, 0)
+        self.draft_mongo.publish(vert_location, self.userid)
+        item = self.old_mongo.get_item(vert_location, 0)
         self.assertNotIn(location, item.children)
         self.assertIsNone(self.draft_mongo.get_parent_location(location))
         with self.assertRaises(ItemNotFoundError):

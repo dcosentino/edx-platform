@@ -153,15 +153,13 @@ class DashboardTest(TestCase):
         )
         self.client = Client()
 
+    @unittest.skipUnless(settings.ROOT_URLCONF == 'lms.urls', 'Test only valid in lms')
     def check_verification_status_on(self, mode, value):
         """
         Check that the css class and the status message are in the dashboard html.
         """
         CourseEnrollment.enroll(self.user, self.course.location.course_key, mode=mode)
-        try:
-            response = self.client.get(reverse('dashboard'))
-        except NoReverseMatch:
-            raise SkipTest("Skip this test if url cannot be found (ie running from CMS tests)")
+        response = self.client.get(reverse('dashboard'))
         self.assertContains(response, "class=\"course {0}\"".format(mode))
         self.assertContains(response, value)
 
@@ -175,15 +173,13 @@ class DashboardTest(TestCase):
         self.check_verification_status_on('honor', 'You\'re enrolled as an honor code student')
         self.check_verification_status_on('audit', 'You\'re auditing this course')
 
+    @unittest.skipUnless(settings.ROOT_URLCONF == 'lms.urls', 'Test only valid in lms')
     def check_verification_status_off(self, mode, value):
         """
         Check that the css class and the status message are not in the dashboard html.
         """
         CourseEnrollment.enroll(self.user, self.course.location.course_key, mode=mode)
-        try:
-            response = self.client.get(reverse('dashboard'))
-        except NoReverseMatch:
-            raise SkipTest("Skip this test if url cannot be found (ie running from CMS tests)")
+        response = self.client.get(reverse('dashboard'))
         self.assertNotContains(response, "class=\"course {0}\"".format(mode))
         self.assertNotContains(response, value)
 
@@ -230,7 +226,6 @@ class DashboardTest(TestCase):
         verified_mode.expiration_datetime = datetime.now(pytz.UTC) - timedelta(days=1)
         verified_mode.save()
         self.assertFalse(enrollment.refundable())
-
 
 
 class EnrollInCourseTest(TestCase):
@@ -428,6 +423,88 @@ class EnrollInCourseTest(TestCase):
         CourseEnrollment.enroll(user, course_id)
         self.assertTrue(CourseEnrollment.is_enrolled(user, course_id))
         self.assert_enrollment_event_was_emitted(user, course_id)
+
+
+@override_settings(MODULESTORE=TEST_DATA_MIXED_MODULESTORE)
+@unittest.skipUnless(settings.ROOT_URLCONF == 'lms.urls', 'Test only valid in lms')
+class ChangeEnrollmentViewTest(ModuleStoreTestCase):
+    """Tests the student.views.change_enrollment view"""
+
+    def setUp(self):
+        super(ChangeEnrollmentViewTest, self).setUp()
+        self.course = CourseFactory.create()
+        self.user = UserFactory.create(password='secret')
+        self.client.login(username=self.user.username, password='secret')
+        self.url = reverse('change_enrollment')
+
+    def enroll_through_view(self, course):
+        response = self.client.post(
+            reverse('change_enrollment'), {
+                'course_id': course.id.to_deprecated_string(),
+                'enrollment_action': 'enroll'
+            }
+        )
+        return response
+
+    def test_enroll_as_honor(self):
+        """Tests that a student can successfully enroll through this view"""
+        response = self.enroll_through_view(self.course)
+        self.assertEqual(response.status_code, 200)
+        enrollment_mode, is_active = CourseEnrollment.enrollment_mode_for_user(
+            self.user, self.course.id
+        )
+        self.assertTrue(is_active)
+        self.assertEqual(enrollment_mode, u'honor')
+
+    def test_cannot_enroll_if_already_enrolled(self):
+        """
+        Tests that a student will not be able to enroll through this view if
+        they are already enrolled in the course
+        """
+        CourseEnrollment.enroll(self.user, self.course.id)
+        self.assertTrue(CourseEnrollment.is_enrolled(self.user, self.course.id))
+        # now try to enroll that student
+        response = self.enroll_through_view(self.course)
+        self.assertEqual(response.status_code, 400)
+
+    def test_change_to_honor_if_verified(self):
+        """
+        Tests that a student that is a currently enrolled verified student cannot
+        accidentally change their enrollment to verified
+        """
+        CourseEnrollment.enroll(self.user, self.course.id, mode=u'verified')
+        self.assertTrue(CourseEnrollment.is_enrolled(self.user, self.course.id))
+        # now try to enroll the student in the honor mode:
+        response = self.enroll_through_view(self.course)
+        self.assertEqual(response.status_code, 400)
+        enrollment_mode, is_active = CourseEnrollment.enrollment_mode_for_user(
+            self.user, self.course.id
+        )
+        self.assertTrue(is_active)
+        self.assertEqual(enrollment_mode, u'verified')
+
+    def test_change_to_honor_if_verified_not_active(self):
+        """
+        Tests that one can renroll for a course if one has already unenrolled
+        """
+        # enroll student
+        CourseEnrollment.enroll(self.user, self.course.id, mode=u'verified')
+        # now unenroll student:
+        CourseEnrollment.unenroll(self.user, self.course.id)
+        # check that they are verified but inactive
+        enrollment_mode, is_active = CourseEnrollment.enrollment_mode_for_user(
+            self.user, self.course.id
+        )
+        self.assertFalse(is_active)
+        self.assertEqual(enrollment_mode, u'verified')
+        # now enroll them through the view:
+        response = self.enroll_through_view(self.course)
+        self.assertEqual(response.status_code, 200)
+        enrollment_mode, is_active = CourseEnrollment.enrollment_mode_for_user(
+            self.user, self.course.id
+        )
+        self.assertTrue(is_active)
+        self.assertEqual(enrollment_mode, u'honor')
 
 
 @override_settings(MODULESTORE=TEST_DATA_MIXED_MODULESTORE)
