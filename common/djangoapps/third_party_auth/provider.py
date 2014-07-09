@@ -159,6 +159,7 @@ class ECOOpenId(BaseProvider):
     SETTINGS = {
         'SOCIAL_AUTH_ECOOPENID_AUTH_KEY': None,
         'SOCIAL_AUTH_ECOOPENID_AUTH_SECRET': None,
+        'SOCIAL_AUTH_ECOOPENID_AUTH_IDP_URL': None,
     }
 
     @classmethod
