@@ -1,9 +1,10 @@
+import base64
+import jwt
+from social.exceptions import AuthFailed, AuthCanceled
 from social.backends.oauth import BaseOAuth2, BaseOAuth1
 from social.backends import google
-import base64
 
-
-class ECOOpenIdBackend(google.GoogleOAuth2):
+class ECOOpenIdBackend(BaseOAuth2):
     """ECOOpendId authentication backend"""
     name = 'ecoopenid-auth'
     REDIRECT_STATE = False
@@ -21,6 +22,24 @@ class ECOOpenIdBackend(google.GoogleOAuth2):
                 ('{0}:{1}'.format(*self.get_key_and_secret()).encode())
             ))
     }
+   
+    def do_auth(self, access_token, *args, **kwargs):
+        """Finish the auth process once the access_token was retrieved"""
+        data = self.user_data(access_token, *args, **kwargs)
+        response = kwargs.get('response') or {}
+        response.update(data or {})
+        client,secret=self.get_key_and_secret()
+        id_token=response.get['id_token']
+        print "id_token"+str(id_token)
+        try:  # Decode the token, using the Application Signature from settings
+            decoded = jwt.decode(id_token, secret)
+        except jwt.DecodeError:  # Wrong signature, fail authentication
+            raise AuthCanceled(self)
+        response['sub']=decoded['sub']
+        response['exp']=decoded['exp']
+        response['nonce']=decoded['nonce']
+        kwargs.update({'response': response, 'backend': self})
+        return self.strategy.authenticate(*args, **kwargs)
         
     def get_user_details(self, response):
         """Return user details from ECO account"""
@@ -39,8 +58,10 @@ class ECOOpenIdBackend(google.GoogleOAuth2):
     
     def user_data(self, access_token, *args, **kwargs):
         """Return user data from Google API"""
-        return self.get_json(
+        values= self.get_json(
             'http://ecoidp.test.reimeritsolutions.nl/userinfo',
             headers={'Authorization': 'Bearer {0}'.format(access_token)}
         )
+        values['username']=values['nickname']
+        return values
 
