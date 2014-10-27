@@ -150,6 +150,7 @@ class LinkedInOauth2(BaseProvider):
     def get_name(cls, provider_details):
         return provider_details.get('fullname')
 
+
 class ECOOpenId(BaseProvider):
     """Provider for ECOOpenId auth system."""
 
@@ -159,6 +160,7 @@ class ECOOpenId(BaseProvider):
     SETTINGS = {
         'SOCIAL_AUTH_ECOOPENID_AUTH_KEY': None,
         'SOCIAL_AUTH_ECOOPENID_AUTH_SECRET': None,
+        'SOCIAL_AUTH_ECOOPENID_AUTH_IDP_URL': None,
     }
 
     @classmethod
