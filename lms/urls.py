@@ -546,6 +546,10 @@ if settings.FEATURES.get('ENABLE_NEW_DASHBOARD'):
 
 urlpatterns = patterns(*urlpatterns)
 
+urlpatterns += (
+    url(r'', include('oai.urls')),
+)
+
 if settings.DEBUG:
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
 
