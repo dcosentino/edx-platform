@@ -1,0 +1,12 @@
+{% extends "oai/endpoint-common.xml" %}
+{% block mainContent %}
+<GetRecord>
+    <record>
+    <header>
+        <identifier>{{ record.identifier }}</identifier>
+        <datestamp>{{ record.timestamp }}</datestamp>{% for setspec in record.sets.all %}
+        <setSpec>{{ setspec }}</setSpec>{% endfor %}
+    </header>
+    {% autoescape off %}{{ record.metadata }}{% endautoescape %}
+</record>
+</GetRecord>{% endblock mainContent %}
