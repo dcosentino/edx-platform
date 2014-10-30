@@ -18,7 +18,7 @@ from edxmako.shortcuts import render_to_response
 def formatError(errorCode, errorMessage, context, request):
     context['errorCode'] = errorCode
     context['errorMessage'] = errorMessage
-    return render_to_response('oai/error.xml', context, content_type='text/xml')
+    return render(request,'oai/error.xml', context, content_type='text/xml')
 
 
 def endpoint(request):
@@ -51,16 +51,15 @@ def endpoint(request):
 
 
 def identify(request, context):
-    context['baseURL'] = 'http://' + \
-        request.get_host() + '/' + OAI_ENDPOINT_NAME
+    context['baseURL'] = OAI_BASE_URL + '/' + OAI_ENDPOINT_NAME
     context['repoName'] = REPOSITORY_NAME
     context['adminEmail'] = ADMIN_EMAIL
     earliest = OaiRecord.objects.order_by('timestamp')[0]
     if earliest:
-        context['earliestDatestamp'] =make_naive(earliest.timestamp, UTC()).replace(microsecond=0).isoformat()+'Z' 
+        context['earliestDatestamp'] = earliest.timestamp 
     else:
-        context['earliestDatestamp'] = make_naive(timezone.now(), UTC()).replace(microsecond=0).isoformat()+'Z'
-    return render_to_response('oai/identify.xml', context, content_type='text/xml')
+        context['earliestDatestamp'] = timezone.now()
+    return render(request,'oai/identify.xml', context, content_type='text/xml')
 
 
 def getRecord(request, context):
@@ -76,9 +75,8 @@ def getRecord(request, context):
     except ObjectDoesNotExist:
         raise OaiRequestError(
             'badArgument', 'The record "' + record_id + '" does not exist.')
-    record.timestamp=make_naive(record.timestamp, UTC()).replace(microsecond=0).isoformat()+'Z'
     context['record'] = record
-    return render_to_response('oai/GetRecord.xml', context, content_type='text/xml')
+    return render(request,'oai/GetRecord.xml', context, content_type='text/xml')
 
 
 def listSomething(request, context, verb):
@@ -101,10 +99,10 @@ def listMetadataFormats(request, context):
             raise OaiRequestError(
                 'badArgument', 'This identifier "' + id + '" does not exist.')
         context['records'] = records
-        return render_to_response('oai/ListFormatsByIdentifier.xml', context, content_type='text/xml')
+        return render(request,'oai/ListFormatsByIdentifier.xml', context, content_type='text/xml')
     else:
         context['matches'] = matches
-        return render_to_response('oai/ListMetadataFormats.xml', context, content_type='text/xml')
+        return render(request,'oai/ListMetadataFormats.xml', context, content_type='text/xml')
 
 
 def getListQuery(context, request):

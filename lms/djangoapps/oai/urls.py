@@ -8,5 +8,5 @@ from oai.utils import OAI_ENDPOINT_NAME
 
 # Additionally, we include login URLs for the browseable API.
 urlpatterns = patterns('',
-     url(r'^'+OAI_ENDPOINT_NAME+'$', endpoint, name='oaiEndpoint'),
+     url(r'^'+OAI_ENDPOINT_NAME+'/?$', endpoint, name='oaiEndpoint'),
 )
