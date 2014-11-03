@@ -31,7 +31,7 @@ def handleListQuery(request, context, queryType, parameters, offset=0):
         token = createResumptionToken(queryType, parameters, offset+RESULTS_LIMIT, count)
         context['token'] = token
     context['matches'] = matches[offset:(offset+RESULTS_LIMIT)]
-    return render_to_response(request, 'oai/'+queryType+'.xml', context, content_type='text/xml')
+    return render_to_response('oai/'+queryType+'.xml', context, content_type='text/xml')
 
 
 def createResumptionToken(queryType, queryParameters, offset, totalCount):
