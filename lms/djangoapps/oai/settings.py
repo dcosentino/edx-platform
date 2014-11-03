@@ -3,6 +3,11 @@ from django.conf import settings
 from datetime import timedelta
 
 # Endpoint settings
+OAI_BASE_URL="http"
+if settings.HTTPS == "on":
+    OAI_BASE_URL="https"
+OAI_BASE_URL=OAI_BASE_URL+"://"+settings.SITE_NAME
+
 REPOSITORY_NAME = settings.PLATFORM_NAME
 ADMIN_EMAIL = settings.TECH_SUPPORT_EMAIL
 OAI_ENDPOINT_NAME = 'oai'
