@@ -55,7 +55,7 @@ def identify(request, context):
         request.get_host() + '/' + OAI_ENDPOINT_NAME
     context['repoName'] = REPOSITORY_NAME
     context['adminEmail'] = ADMIN_EMAIL
-    earliest = OaiRecord.objects.order_by('timestamp').first()
+    earliest = OaiRecord.objects.order_by('timestamp')[0]
     if earliest:
         context['earliestDatestamp'] = earliest.timestamp
     else:
