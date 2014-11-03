@@ -57,9 +57,9 @@ def identify(request, context):
     context['adminEmail'] = ADMIN_EMAIL
     earliest = OaiRecord.objects.order_by('timestamp')[0]
     if earliest:
-        context['earliestDatestamp'] = earliest.timestamp
+        context['earliestDatestamp'] =make_naive(earliest.timestamp, UTC()).replace(microsecond=0).isoformat()+'Z' 
     else:
-        context['earliestDatestamp'] = timezone.now()
+        context['earliestDatestamp'] = make_naive(timezone.now(), UTC()).replace(microsecond=0).isoformat()+'Z'
     return render_to_response('oai/identify.xml', context, content_type='text/xml')
 
 
