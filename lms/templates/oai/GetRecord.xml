@@ -1,10 +1,11 @@
 {% extends "oai/endpoint-common.xml" %}
+{% load iso %}
 {% block mainContent %}
 <GetRecord>
     <record>
     <header>
         <identifier>{{ record.identifier }}</identifier>
-        <datestamp>{{ record.timestamp }}</datestamp>{% for setspec in record.sets.all %}
+        <datestamp>{% tisoformat record.timestamp %}</datestamp>{% for setspec in record.sets.all %}
         <setSpec>{{ setspec }}</setSpec>{% endfor %}
     </header>
     {% autoescape off %}{{ record.metadata }}{% endautoescape %}
