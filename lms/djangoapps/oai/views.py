@@ -24,7 +24,10 @@ def formatError(errorCode, errorMessage, context, request):
 
 def endpoint(request):
     verb = request.GET.get('verb')
-    thisUrl = 'http://' + request.get_host() + request.get_full_path()
+    thisUrl = 'http'
+    if (request.is_secure()):
+        thisUrl = thisUrl+'s'
+    thisUrl = thisUrl+'://' + request.get_host() + request.get_full_path()
     timestamp = datetime.utcnow()
     timestamp = timestamp.replace(microsecond=0)
     context = {'thisUrl': thisUrl,
