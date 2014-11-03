@@ -76,7 +76,7 @@ def getRecord(request, context):
     except ObjectDoesNotExist:
         raise OaiRequestError(
             'badArgument', 'The record "' + record_id + '" does not exist.')
-    record.timestamp=make_naive(date, UTC()).replace(microsecond=0).isoformat()+'Z'
+    record.timestamp=make_naive(record.timestamp, UTC()).replace(microsecond=0).isoformat()+'Z'
     context['record'] = record
     return render_to_response('oai/GetRecord.xml', context, content_type='text/xml')
 
