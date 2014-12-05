@@ -3,7 +3,7 @@ Views related to operations on course objects
 """
 import json
 import random
-import string  # pylint: disable=W0402
+import string  # pylint: disable=deprecated-module
 import logging
 from django.utils.translation import ugettext as _
 import django.utils
@@ -261,6 +261,7 @@ def course_rerun_handler(request, course_key_string):
                 'allow_unicode_course_id': settings.FEATURES.get('ALLOW_UNICODE_COURSE_ID', False)
             })
 
+
 def _course_outline_json(request, course_module):
     """
     Returns a JSON representation of the course module and recursively all of its children.
@@ -386,10 +387,13 @@ def course_listing(request):
             'run': uca.course_key.run,
             'is_failed': True if uca.state == CourseRerunUIStateManager.State.FAILED else False,
             'is_in_progress': True if uca.state == CourseRerunUIStateManager.State.IN_PROGRESS else False,
-            'dismiss_link':
-                reverse_course_url('course_notifications_handler', uca.course_key, kwargs={
+            'dismiss_link': reverse_course_url(
+                'course_notifications_handler',
+                uca.course_key,
+                kwargs={
                     'action_state_id': uca.id,
-                }) if uca.state == CourseRerunUIStateManager.State.FAILED else ''
+                },
+            ) if uca.state == CourseRerunUIStateManager.State.FAILED else ''
         }
 
     # remove any courses in courses that are also in the in_process_course_actions list
@@ -455,10 +459,13 @@ def course_index(request, course_key):
             'rerun_notification_id': current_action.id if current_action else None,
             'course_release_date': course_release_date,
             'settings_url': settings_url,
-            'notification_dismiss_url':
-                reverse_course_url('course_notifications_handler', current_action.course_key, kwargs={
+            'notification_dismiss_url': reverse_course_url(
+                'course_notifications_handler',
+                current_action.course_key,
+                kwargs={
                     'action_state_id': current_action.id,
-                }) if current_action else None,
+                },
+            ) if current_action else None,
         })
 
 
@@ -542,7 +549,7 @@ def _create_or_rerun_course(request):
         return JsonResponse({
             'ErrMsg': _(
                 'There is already a course defined with the same '
-                'organization, course number, and course run. Please '
+                'organization and course number. Please '
                 'change either organization or course number to be unique.'
             ),
             'OrgErrMsg': _(
@@ -564,6 +571,22 @@ def _create_new_course(request, org, number, run, fields):
     Returns the URL for the course overview page.
     Raises DuplicateCourseError if the course already exists
     """
+    store_for_new_course = (
+        settings.FEATURES.get('DEFAULT_STORE_FOR_NEW_COURSE') or
+        modulestore().default_modulestore.get_modulestore_type()
+    )
+    new_course = create_new_course_in_store(store_for_new_course, request.user, org, number, run, fields)
+    return JsonResponse({
+        'url': reverse_course_url('course_handler', new_course.id),
+        'course_key': unicode(new_course.id),
+    })
+
+
+def create_new_course_in_store(store, user, org, number, run, fields):
+    """
+    Create course in store w/ handling instructor enrollment, permissions, and defaulting the wiki slug.
+    Separated out b/c command line course creation uses this as well as the web interface.
+    """
     # Set a unique wiki_slug for newly created courses. To maintain active wiki_slugs for
     # existing xml courses this cannot be changed in CourseDescriptor.
     # # TODO get rid of defining wiki slug in this org/course/run specific way and reconcile
@@ -572,31 +595,22 @@ def _create_new_course(request, org, number, run, fields):
     definition_data = {'wiki_slug': wiki_slug}
     fields.update(definition_data)
 
-    store = modulestore()
-    store_for_new_course = (
-        settings.FEATURES.get('DEFAULT_STORE_FOR_NEW_COURSE') or
-        store.default_modulestore.get_modulestore_type()
-    )
-    with store.default_store(store_for_new_course):
+    with modulestore().default_store(store):
         # Creating the course raises DuplicateCourseError if an existing course with this org/name is found
-        new_course = store.create_course(
+        new_course = modulestore().create_course(
             org,
             number,
             run,
-            request.user.id,
+            user.id,
             fields=fields,
         )
 
     # Make sure user has instructor and staff access to the new course
-    add_instructor(new_course.id, request.user, request.user)
+    add_instructor(new_course.id, user, user)
 
     # Initialize permissions for user in the new course
-    initialize_permissions(new_course.id, request.user)
-
-    return JsonResponse({
-        'url': reverse_course_url('course_handler', new_course.id),
-        'course_key': unicode(new_course.id),
-    })
+    initialize_permissions(new_course.id, user)
+    return new_course
 
 
 def _rerun_course(request, org, number, run, fields):
@@ -1283,10 +1297,12 @@ class GroupConfiguration(object):
                 'container_handler',
                 course.location.course_key.make_usage_key(unit.location.block_type, unit.location.name)
             )
+
+            validation_summary = split_test.general_validation_message()
             usage_info[split_test.user_partition_id].append({
                 'label': '{} / {}'.format(unit.display_name, split_test.display_name),
                 'url': unit_url,
-                'validation': split_test.general_validation_message,
+                'validation': validation_summary.to_json() if validation_summary else None,
             })
         return usage_info
 

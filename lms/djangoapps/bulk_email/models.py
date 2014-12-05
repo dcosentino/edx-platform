@@ -43,7 +43,7 @@ class Email(models.Model):
     created = models.DateTimeField(auto_now_add=True)
     modified = models.DateTimeField(auto_now=True)
 
-    class Meta:  # pylint: disable=C0111
+    class Meta:  # pylint: disable=missing-docstring
         abstract = True
 
 
@@ -130,6 +130,7 @@ class CourseEmail(Email):
         """
         return CourseEmailTemplate.get_template(name=self.template_name)
 
+
 class Optout(models.Model):
     """
     Stores users that have opted out of receiving emails from a course.
@@ -140,7 +141,7 @@ class Optout(models.Model):
     user = models.ForeignKey(User, db_index=True, null=True)
     course_id = CourseKeyField(max_length=255, db_index=True)
 
-    class Meta:  # pylint: disable=C0111
+    class Meta:  # pylint: disable=missing-docstring
         unique_together = ('user', 'course_id')
 
 

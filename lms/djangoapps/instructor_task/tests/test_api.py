@@ -1,12 +1,10 @@
 """
 Test for LMS instructor background task queue management
 """
-
+from bulk_email.models import CourseEmail, SEND_TO_ALL
+from courseware.tests.factories import UserFactory
 from xmodule.modulestore.exceptions import ItemNotFoundError
 
-from courseware.tests.factories import UserFactory
-
-from bulk_email.models import CourseEmail, SEND_TO_ALL
 from instructor_task.api import (
     get_running_instructor_tasks,
     get_instructor_task_history,
@@ -23,6 +21,7 @@ from instructor_task.models import InstructorTask, PROGRESS
 from instructor_task.tests.test_base import (InstructorTaskTestCase,
                                              InstructorTaskCourseTestCase,
                                              InstructorTaskModuleTestCase,
+                                             TestReportMixin,
                                              TEST_COURSE_KEY)
 
 
@@ -158,7 +157,7 @@ class InstructorTaskModuleSubmitTest(InstructorTaskModuleTestCase):
         self._test_submit_task(submit_delete_problem_state_for_all_students)
 
 
-class InstructorTaskCourseSubmitTest(InstructorTaskCourseTestCase):
+class InstructorTaskCourseSubmitTest(TestReportMixin, InstructorTaskCourseTestCase):
     """Tests API methods that involve the submission of course-based background tasks."""
 
     def setUp(self):
@@ -169,7 +168,7 @@ class InstructorTaskCourseSubmitTest(InstructorTaskCourseTestCase):
     def _define_course_email(self):
         """Create CourseEmail object for testing."""
         course_email = CourseEmail.create(self.course.id, self.instructor, SEND_TO_ALL, "Test Subject", "<p>This is a test message</p>")
-        return course_email.id  # pylint: disable=E1101
+        return course_email.id  # pylint: disable=no-member
 
     def _test_resubmission(self, api_call):
         """
@@ -180,7 +179,7 @@ class InstructorTaskCourseSubmitTest(InstructorTaskCourseTestCase):
         `AlreadyRunningError`.
         """
         instructor_task = api_call()
-        instructor_task = InstructorTask.objects.get(id=instructor_task.id)  # pylint: disable=E1101
+        instructor_task = InstructorTask.objects.get(id=instructor_task.id)  # pylint: disable=no-member
         instructor_task.task_state = PROGRESS
         instructor_task.save()
         with self.assertRaises(AlreadyRunningError):

@@ -1,5 +1,5 @@
-# pylint: disable=C0111
-# pylint: disable=W0621
+# pylint: disable=missing-docstring
+# pylint: disable=redefined-outer-name
 
 from lettuce import world, step
 from lettuce.django import django_url
@@ -32,7 +32,7 @@ def create_cert_course():
         min_price=16,
         suggested_prices='32,64,128',
         currency='usd',
-        )
+    )
 
 
 def register():
@@ -61,7 +61,7 @@ def select_contribution(amount=32):
 
 def click_verified_track_button():
     world.wait_for_ajax_complete()
-    btn_css = 'input[value="Select Certificate"]'
+    btn_css = 'input[value="Pursue a Verified Certificate"]'
     world.css_click(btn_css)
 
 
@@ -69,7 +69,7 @@ def click_verified_track_button():
 def select_verified_track_upgrade(step):
     select_contribution(32)
     world.wait_for_ajax_complete()
-    btn_css = 'input[value="Upgrade Your Registration"]'
+    btn_css = 'input[value="Upgrade Your Enrollment"]'
     world.css_click(btn_css)
     # TODO: might want to change this depending on the changes for upgrade
     assert world.is_css_present('section.progress')

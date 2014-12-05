@@ -5,12 +5,12 @@ End-to-end tests for the LMS.
 
 from textwrap import dedent
 from unittest import skip
+from nose.plugins.attrib import attr
 
 from bok_choy.web_app_test import WebAppTest
 from ..helpers import UniqueCourseTest, load_data_str
 from ...pages.lms.auto_auth import AutoAuthPage
-from ...pages.lms.find_courses import FindCoursesPage
-from ...pages.lms.course_about import CourseAboutPage
+from ...pages.common.logout import LogoutPage
 from ...pages.lms.course_info import CourseInfoPage
 from ...pages.lms.tab_nav import TabNavPage
 from ...pages.lms.course_nav import CourseNavPage
@@ -19,49 +19,168 @@ from ...pages.lms.dashboard import DashboardPage
 from ...pages.lms.problem import ProblemPage
 from ...pages.lms.video.video import VideoPage
 from ...pages.lms.courseware import CoursewarePage
+from ...pages.lms.login_and_register import CombinedLoginAndRegisterPage
 from ...fixtures.course import CourseFixture, XBlockFixtureDesc, CourseUpdateDesc
 
 
-class RegistrationTest(UniqueCourseTest):
-    """
-    Test the registration process.
+@attr('shard_1')
+class LoginFromCombinedPageTest(UniqueCourseTest):
+    """Test that we can log in using the combined login/registration page.
+
+    Also test that we can request a password reset from the combined
+    login/registration page.
+
     """
 
     def setUp(self):
-        """
-        Initialize pages and install a course fixture.
-        """
-        super(RegistrationTest, self).setUp()
+        """Initialize the page objects and create a test course. """
+        super(LoginFromCombinedPageTest, self).setUp()
+        self.login_page = CombinedLoginAndRegisterPage(
+            self.browser,
+            start_page="login",
+            course_id=self.course_id
+        )
+        self.dashboard_page = DashboardPage(self.browser)
 
-        self.find_courses_page = FindCoursesPage(self.browser)
-        self.course_about_page = CourseAboutPage(self.browser, self.course_id)
-
-        # Create a course to register for
+        # Create a course to enroll in
         CourseFixture(
             self.course_info['org'], self.course_info['number'],
             self.course_info['run'], self.course_info['display_name']
         ).install()
 
-    def test_register(self):
+    def test_login_success(self):
+        # Create a user account
+        email, password = self._create_unique_user()
 
-        # Visit the main page with the list of courses
-        self.find_courses_page.visit()
+        # Navigate to the login page and try to log in
+        self.login_page.visit().login(email=email, password=password)
 
-        # Go to the course about page and click the register button
-        self.course_about_page.visit()
-        register_page = self.course_about_page.register()
+        # Expect that we reach the dashboard and we're auto-enrolled in the course
+        course_names = self.dashboard_page.wait_for_page().available_courses
+        self.assertIn(self.course_info["display_name"], course_names)
 
-        # Fill in registration info and submit
-        username = "test_" + self.unique_id[0:6]
-        register_page.provide_info(
-            username + "@example.com", "test", username, "Test User"
+    def test_login_failure(self):
+        # Navigate to the login page
+        self.login_page.visit()
+
+        # User account does not exist
+        self.login_page.login(email="nobody@nowhere.com", password="password")
+
+        # Verify that an error is displayed
+        self.assertIn("Email or password is incorrect.", self.login_page.wait_for_errors())
+
+    def test_toggle_to_register_form(self):
+        self.login_page.visit().toggle_form()
+        self.assertEqual(self.login_page.current_form, "register")
+
+    def test_password_reset_success(self):
+        # Create a user account
+        email, password = self._create_unique_user()
+
+        # Navigate to the password reset form and try to submit it
+        self.login_page.visit().password_reset(email=email)
+
+        # Expect that we're shown a success message
+        self.assertIn("PASSWORD RESET EMAIL SENT", self.login_page.wait_for_success())
+
+    def test_password_reset_failure(self):
+        # Navigate to the password reset form
+        self.login_page.visit()
+
+        # User account does not exist
+        self.login_page.password_reset(email="nobody@nowhere.com")
+
+        # Expect that we're shown a failure message
+        self.assertIn(
+            "No active user with the provided email address exists.",
+            self.login_page.wait_for_errors()
         )
-        dashboard = register_page.submit()
 
-        # We should end up at the dashboard
-        # Check that we're registered for the course
-        course_names = dashboard.available_courses
-        self.assertIn(self.course_info['display_name'], course_names)
+    def _create_unique_user(self):
+        username = "test_{uuid}".format(uuid=self.unique_id[0:6])
+        email = "{user}@example.com".format(user=username)
+        password = "password"
+
+        # Create the user (automatically logs us in)
+        AutoAuthPage(
+            self.browser,
+            username=username,
+            email=email,
+            password=password
+        ).visit()
+
+        # Log out
+        LogoutPage(self.browser).visit()
+
+        return (email, password)
+
+
+@attr('shard_1')
+class RegisterFromCombinedPageTest(UniqueCourseTest):
+    """Test that we can register a new user from the combined login/registration page. """
+
+    def setUp(self):
+        """Initialize the page objects and create a test course. """
+        super(RegisterFromCombinedPageTest, self).setUp()
+        self.register_page = CombinedLoginAndRegisterPage(
+            self.browser,
+            start_page="register",
+            course_id=self.course_id
+        )
+        self.dashboard_page = DashboardPage(self.browser)
+
+        # Create a course to enroll in
+        CourseFixture(
+            self.course_info['org'], self.course_info['number'],
+            self.course_info['run'], self.course_info['display_name']
+        ).install()
+
+    def test_register_success(self):
+        # Navigate to the registration page
+        self.register_page.visit()
+
+        # Fill in the form and submit it
+        username = "test_{uuid}".format(uuid=self.unique_id[0:6])
+        email = "{user}@example.com".format(user=username)
+        self.register_page.register(
+            email=email,
+            password="password",
+            username=username,
+            full_name="Test User",
+            country="US",
+            terms_of_service=True
+        )
+
+        # Expect that we reach the dashboard and we're auto-enrolled in the course
+        course_names = self.dashboard_page.wait_for_page().available_courses
+        self.assertIn(self.course_info["display_name"], course_names)
+
+    def test_register_failure(self):
+        # Navigate to the registration page
+        self.register_page.visit()
+
+        # Enter a blank for the username field, which is required
+        # Don't agree to the terms of service / honor code.
+        # Don't specify a country code, which is required.
+        username = "test_{uuid}".format(uuid=self.unique_id[0:6])
+        email = "{user}@example.com".format(user=username)
+        self.register_page.register(
+            email=email,
+            password="password",
+            username="",
+            full_name="Test User",
+            terms_of_service=False
+        )
+
+        # Verify that the expected errors are displayed.
+        errors = self.register_page.wait_for_errors()
+        self.assertIn(u'The Username field cannot be empty.', errors)
+        self.assertIn(u'You must agree to the edX Terms of Service and Honor Code.', errors)
+        self.assertIn(u'The Country field cannot be empty.', errors)
+
+    def test_toggle_to_login_form(self):
+        self.register_page.visit().toggle_form()
+        self.assertEqual(self.register_page.current_form, "login")
 
 
 class LanguageTest(WebAppTest):

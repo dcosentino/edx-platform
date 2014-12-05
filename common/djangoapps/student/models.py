@@ -31,7 +31,7 @@ from django.db.models import Count
 from django.dispatch import receiver, Signal
 from django.core.exceptions import ObjectDoesNotExist
 from django.utils.translation import ugettext_noop
-from django_countries import CountryField
+from django_countries.fields import CountryField
 from config_models.models import ConfigurationModel
 from track import contexts
 from eventtracking import tracker
@@ -56,7 +56,7 @@ from ratelimitbackend import admin
 
 import analytics
 
-UNENROLL_DONE = Signal(providing_args=["course_enrollment"])
+UNENROLL_DONE = Signal(providing_args=["course_enrollment", "skip_refund"])
 log = logging.getLogger(__name__)
 AUDIT_LOG = logging.getLogger("audit")
 SessionStore = import_module(settings.SESSION_ENGINE).SessionStore  # pylint: disable=invalid-name
@@ -665,14 +665,18 @@ class LoginFailures(models.Model):
 class CourseEnrollmentException(Exception):
     pass
 
+
 class NonExistentCourseError(CourseEnrollmentException):
     pass
+
 
 class EnrollmentClosedError(CourseEnrollmentException):
     pass
 
+
 class CourseFullError(CourseEnrollmentException):
     pass
+
 
 class AlreadyEnrolledError(CourseEnrollmentException):
     pass
@@ -776,7 +780,7 @@ class CourseEnrollment(models.Model):
             is_course_full = cls.num_enrolled_in(course.id) >= course.max_student_enrollments_allowed
         return is_course_full
 
-    def update_enrollment(self, mode=None, is_active=None):
+    def update_enrollment(self, mode=None, is_active=None, skip_refund=False):
         """
         Updates an enrollment for a user in a class.  This includes options
         like changing the mode, toggling is_active True/False, etc.
@@ -784,6 +788,7 @@ class CourseEnrollment(models.Model):
         Also emits relevant events for analytics purposes.
 
         This saves immediately.
+
         """
         activation_changed = False
         # if is_active is None, then the call to update_enrollment didn't specify
@@ -814,7 +819,7 @@ class CourseEnrollment(models.Model):
                 )
 
             else:
-                UNENROLL_DONE.send(sender=None, course_enrollment=self)
+                UNENROLL_DONE.send(sender=None, course_enrollment=self, skip_refund=skip_refund)
 
                 self.emit_event(EVENT_NAME_ENROLLMENT_DEACTIVATED)
 
@@ -987,7 +992,7 @@ class CourseEnrollment(models.Model):
             raise
 
     @classmethod
-    def unenroll(cls, user, course_id):
+    def unenroll(cls, user, course_id, skip_refund=False):
         """
         Remove the user from a given course. If the relevant `CourseEnrollment`
         object doesn't exist, we log an error but don't throw an exception.
@@ -997,10 +1002,12 @@ class CourseEnrollment(models.Model):
                adding an enrollment for it.
 
         `course_id` is our usual course_id string (e.g. "edX/Test101/2013_Fall)
+
+        `skip_refund` can be set to True to avoid the refund process.
         """
         try:
             record = CourseEnrollment.objects.get(user=user, course_id=course_id)
-            record.update_enrollment(is_active=False)
+            record.update_enrollment(is_active=False, skip_refund=skip_refund)
 
         except cls.DoesNotExist:
             err_msg = u"Tried to unenroll student {} from {} but they were not enrolled"
@@ -1157,7 +1164,7 @@ class CourseEnrollment(models.Model):
         if GeneratedCertificate.certificate_for_student(self.user, self.course_id) is not None:
             return False
 
-        #TODO - When Course administrators to define a refund period for paid courses then refundable will be supported. # pylint: disable=W0511
+        #TODO - When Course administrators to define a refund period for paid courses then refundable will be supported. # pylint: disable=fixme
 
         course_mode = CourseMode.mode_for_course(self.course_id, 'verified')
         if course_mode is None:

@@ -11,6 +11,7 @@ import logging
 import os
 import re
 import requests
+import urllib
 
 from collections import defaultdict, OrderedDict
 from markupsafe import escape
@@ -133,8 +134,8 @@ def instructor_dashboard(request, course_id):
             'header': ['Statistic', 'Value'],
             'title': _('Course Statistics At A Glance'),
         }
-        data = [['# Enrolled', enrollment_number]]
-        data += [['Date', timezone.now().isoformat()]]
+
+        data = [['Date', timezone.now().isoformat()]]
         data += compute_course_stats(course).items()
         if request.user.is_staff:
             for field in course.fields.values():
@@ -859,7 +860,7 @@ def instructor_dashboard(request, course_id):
                 )
 
                 # Submit the task, so that the correct InstructorTask object gets created (for monitoring purposes)
-                submit_bulk_course_email(request, course_key, email.id)  # pylint: disable=E1101
+                submit_bulk_course_email(request, course_key, email.id)  # pylint: disable=no-member
 
             except Exception as err:  # pylint: disable=broad-except
                 # Catch any errors and deliver a message to the user
@@ -910,7 +911,7 @@ def instructor_dashboard(request, course_id):
         """
         url = settings.ANALYTICS_SERVER_URL + \
             u"get?aname={}&course_id={}&apikey={}".format(
-                analytics_name, course_key.to_deprecated_string(), settings.ANALYTICS_API_KEY
+                analytics_name, urllib.quote(unicode(course_key)), settings.ANALYTICS_API_KEY
             )
         try:
             res = requests.get(url)
@@ -937,11 +938,10 @@ def instructor_dashboard(request, course_id):
             "StudentsDailyActivity",  # active students by day
             "StudentsDropoffPerDay",  # active students dropoff by day
             # "OverallGradeDistribution",  # overall point distribution for course
-            "StudentsActive",  # num students active in time period (default = 1wk)
-            "StudentsEnrolled",  # num students enrolled
             # "StudentsPerProblemCorrect",  # foreach problem, num students correct
             "ProblemGradeDistribution",  # foreach problem, grade distribution
         ]
+
         for analytic_name in DASHBOARD_ANALYTICS:
             analytics_results[analytic_name] = get_analytics_result(analytic_name)
 
@@ -1430,6 +1430,7 @@ def get_student_grade_summary_data(request, course, get_grades=True, get_raw_sco
 #-----------------------------------------------------------------------------
 # enrollment
 
+
 def _do_enroll_students(course, course_key, students, secure=False, overload=False, auto_enroll=False, email_students=False, is_shib_course=False):
     """
     Do the actual work of enrolling multiple students, presented as a string
@@ -1469,7 +1470,7 @@ def _do_enroll_students(course, course_key, students, secure=False, overload=Fal
         registration_url = '{proto}://{site}{path}'.format(
             proto=protocol,
             site=stripped_site_name,
-            path=reverse('student.views.register_user')
+            path=reverse('register_user')
         )
         course_url = '{proto}://{site}{path}'.format(
             proto=protocol,

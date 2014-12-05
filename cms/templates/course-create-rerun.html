@@ -8,15 +8,14 @@
 <%block name="bodyclass">is-signedin view-course-create view-course-create-rerun</%block>
 
 <%block name="jsextra">
-<script type="text/javascript">
-require(["domReady!", "jquery", "jquery.form", "js/views/course_rerun"], function(doc, $) {
-
-});
-</script>
-<script type="text/javascript">
-    var source_course_key = "${source_course_key | escapejs}"
-</script>
-
+  <script type="text/javascript">
+    var source_course_key = "${source_course_key | escapejs}";
+  </script>
+</%block>
+<%block name="requirejs">
+  require(["js/factories/course_create_rerun"], function (CourseCreateRerunFactory) {
+      CourseCreateRerunFactory();
+  });
 </%block>
 
 <%block name="content">
@@ -124,7 +123,7 @@ require(["domReady!", "jquery", "jquery.form", "js/views/course_rerun"], functio
 
         </article>
 
-        <aside class="content-supplementary" role="complimentary">
+        <aside class="content-supplementary" role="complementary">
           <div class="bit">
             <h3 class="title-3">${_("When will my course re-run start?")}</h3>
             <ul class="list-details">

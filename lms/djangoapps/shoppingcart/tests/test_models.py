@@ -19,21 +19,24 @@ from xmodule.modulestore.tests.django_utils import (
     ModuleStoreTestCase, mixed_store_config
 )
 from xmodule.modulestore.tests.factories import CourseFactory
+
 from shoppingcart.models import (
     Order, OrderItem, CertificateItem,
-    InvalidCartItem, PaidCourseRegistration,
+    InvalidCartItem, CourseRegistrationCode, PaidCourseRegistration, CourseRegCodeItem,
     Donation, OrderItemSubclassPK
 )
 from student.tests.factories import UserFactory
 from student.models import CourseEnrollment
 from course_modes.models import CourseMode
-from shoppingcart.exceptions import PurchasedCallbackException, CourseDoesNotExistException
+from shoppingcart.exceptions import (PurchasedCallbackException, CourseDoesNotExistException,
+                                     ItemAlreadyInCartException, AlreadyEnrolledInCourseException)
 
 from opaque_keys.edx.locator import CourseLocator
 
 # Since we don't need any XML course fixtures, use a modulestore configuration
 # that disables the XML modulestore.
 MODULESTORE_CONFIG = mixed_store_config(settings.COMMON_TEST_DATA_ROOT, {}, include_xml=False)
+
 
 @override_settings(MODULESTORE=MODULESTORE_CONFIG)
 class OrderTest(ModuleStoreTestCase):
@@ -45,6 +48,11 @@ class OrderTest(ModuleStoreTestCase):
         for __ in xrange(1, 5):
             self.other_course_keys.append(CourseFactory.create().id)
         self.cost = 40
+
+        # Add mock tracker for event testing.
+        patcher = patch('shoppingcart.models.analytics')
+        self.mock_tracker = patcher.start()
+        self.addCleanup(patcher.stop)
 
     def test_get_cart_for_user(self):
         # create a cart
@@ -63,21 +71,21 @@ class OrderTest(ModuleStoreTestCase):
         item = OrderItem(order=cart, user=self.user)
         item.save()
         self.assertTrue(Order.user_cart_has_items(self.user))
-        self.assertFalse(Order.user_cart_has_items(self.user, CertificateItem))
-        self.assertFalse(Order.user_cart_has_items(self.user, PaidCourseRegistration))
+        self.assertFalse(Order.user_cart_has_items(self.user, [CertificateItem]))
+        self.assertFalse(Order.user_cart_has_items(self.user, [PaidCourseRegistration]))
 
     def test_user_cart_has_paid_course_registration_items(self):
         cart = Order.get_cart_for_user(self.user)
         item = PaidCourseRegistration(order=cart, user=self.user)
         item.save()
-        self.assertTrue(Order.user_cart_has_items(self.user, PaidCourseRegistration))
-        self.assertFalse(Order.user_cart_has_items(self.user, CertificateItem))
+        self.assertTrue(Order.user_cart_has_items(self.user, [PaidCourseRegistration]))
+        self.assertFalse(Order.user_cart_has_items(self.user, [CertificateItem]))
 
     def test_user_cart_has_certificate_items(self):
         cart = Order.get_cart_for_user(self.user)
         CertificateItem.add_to_order(cart, self.course_key, self.cost, 'honor')
-        self.assertTrue(Order.user_cart_has_items(self.user, CertificateItem))
-        self.assertFalse(Order.user_cart_has_items(self.user, PaidCourseRegistration))
+        self.assertTrue(Order.user_cart_has_items(self.user, [CertificateItem]))
+        self.assertFalse(Order.user_cart_has_items(self.user, [PaidCourseRegistration]))
 
     def test_cart_clear(self):
         cart = Order.get_cart_for_user(user=self.user)
@@ -145,6 +153,13 @@ class OrderTest(ModuleStoreTestCase):
         for item in cart.orderitem_set.all():
             self.assertEqual(item.status, 'purchased')
 
+    @override_settings(
+        SEGMENT_IO_LMS_KEY="foobar",
+        FEATURES={
+            'SEGMENT_IO_LMS': True,
+            'STORE_BILLING_INFO': True,
+        }
+    )
     def test_purchase(self):
         # This test is for testing the subclassing functionality of OrderItem, but in
         # order to do this, we end up testing the specific functionality of
@@ -163,6 +178,28 @@ class OrderTest(ModuleStoreTestCase):
         self.assertIn(settings.PAYMENT_SUPPORT_EMAIL, mail.outbox[0].body)
         self.assertIn(unicode(cart.total_cost), mail.outbox[0].body)
         self.assertIn(item.additional_instruction_text, mail.outbox[0].body)
+
+        # Assert Google Analytics event fired for purchase.
+        self.mock_tracker.track.assert_called_once_with(  # pylint: disable=maybe-no-member
+            1,
+            'Completed Order',
+            {
+                'orderId': 1,
+                'currency': 'usd',
+                'total': '40',
+                'products': [
+                    {
+                        'sku': u'CertificateItem.honor',
+                        'name': unicode(self.course_key),
+                        'category': unicode(self.course_key.org),
+                        'price': '40',
+                        'id': 1,
+                        'quantity': 1
+                    }
+                ]
+            },
+            context={'Google Analytics': {'clientId': None}}
+        )
 
     def test_purchase_item_failure(self):
         # once again, we're testing against the specific implementation of
@@ -189,7 +226,7 @@ class OrderTest(ModuleStoreTestCase):
     def test_purchase_item_email_smtp_failure(self, error_logger):
         cart = Order.get_cart_for_user(user=self.user)
         CertificateItem.add_to_order(cart, self.course_key, self.cost, 'honor')
-        with patch('shoppingcart.models.send_mail', side_effect=smtplib.SMTPException):
+        with patch('shoppingcart.models.EmailMessage.send', side_effect=smtplib.SMTPException):
             cart.purchase()
             self.assertTrue(error_logger.called)
 
@@ -326,6 +363,15 @@ class PaidCourseRegistrationTest(ModuleStoreTestCase):
 
         self.assertEqual(self.cart.total_cost, self.cost)
 
+    def test_cart_type_business(self):
+        self.cart.order_type = 'business'
+        self.cart.save()
+        item = CourseRegCodeItem.add_to_order(self.cart, self.course_key, 2)
+        self.cart.purchase()
+        self.assertFalse(CourseEnrollment.is_enrolled(self.user, self.course_key))
+        # check that the registration codes are generated against the order
+        self.assertEqual(len(CourseRegistrationCode.objects.filter(order=self.cart)), item.qty)
+
     def test_add_with_default_mode(self):
         """
         Tests add_to_cart where the mode specified in the argument is NOT in the database
@@ -340,6 +386,31 @@ class PaidCourseRegistrationTest(ModuleStoreTestCase):
         self.assertEqual(reg1.status, "cart")
         self.assertEqual(self.cart.total_cost, 0)
         self.assertTrue(PaidCourseRegistration.contained_in_order(self.cart, self.course_key))
+
+        course_reg_code_item = CourseRegCodeItem.add_to_order(self.cart, self.course_key, 2, mode_slug="DNE")
+
+        self.assertEqual(course_reg_code_item.unit_cost, 0)
+        self.assertEqual(course_reg_code_item.line_cost, 0)
+        self.assertEqual(course_reg_code_item.mode, "honor")
+        self.assertEqual(course_reg_code_item.user, self.user)
+        self.assertEqual(course_reg_code_item.status, "cart")
+        self.assertEqual(self.cart.total_cost, 0)
+        self.assertTrue(CourseRegCodeItem.contained_in_order(self.cart, self.course_key))
+
+    def test_add_course_reg_item_with_no_course_item(self):
+        fake_course_id = CourseLocator(org="edx", course="fake", run="course")
+        with self.assertRaises(CourseDoesNotExistException):
+            CourseRegCodeItem.add_to_order(self.cart, fake_course_id, 2)
+
+    def test_course_reg_item_already_in_cart(self):
+        CourseRegCodeItem.add_to_order(self.cart, self.course_key, 2)
+        with self.assertRaises(ItemAlreadyInCartException):
+            CourseRegCodeItem.add_to_order(self.cart, self.course_key, 2)
+
+    def test_course_reg_item_already_enrolled_in_course(self):
+        CourseEnrollment.enroll(self.user, self.course_key)
+        with self.assertRaises(AlreadyEnrolledInCourseException):
+            CourseRegCodeItem.add_to_order(self.cart, self.course_key, 2)
 
     def test_purchased_callback(self):
         reg1 = PaidCourseRegistration.add_to_order(self.cart, self.course_key)
@@ -381,6 +452,12 @@ class PaidCourseRegistrationTest(ModuleStoreTestCase):
         with self.assertRaises(PurchasedCallbackException):
             reg1.purchased_callback()
         self.assertFalse(CourseEnrollment.is_enrolled(self.user, self.course_key))
+
+        course_reg_code_item = CourseRegCodeItem.add_to_order(self.cart, self.course_key, 2)
+        course_reg_code_item.course_id = CourseLocator(org="changed1", course="forsome1", run="reason1")
+        course_reg_code_item.save()
+        with self.assertRaises(PurchasedCallbackException):
+            course_reg_code_item.purchased_callback()
 
     def test_user_cart_has_both_items(self):
         """
@@ -452,6 +529,24 @@ class CertificateItemTest(ModuleStoreTestCase):
         self.assertTrue(target_certs[0])
         self.assertTrue(target_certs[0].refund_requested_time)
         self.assertEquals(target_certs[0].order.status, 'refunded')
+
+    def test_no_refund_on_cert_callback(self):
+        # If we explicitly skip refunds, the unenroll action should not modify the purchase.
+        CourseEnrollment.enroll(self.user, self.course_key, 'verified')
+        cart = Order.get_cart_for_user(user=self.user)
+        CertificateItem.add_to_order(cart, self.course_key, self.cost, 'verified')
+        cart.purchase()
+
+        CourseEnrollment.unenroll(self.user, self.course_key, skip_refund=True)
+        target_certs = CertificateItem.objects.filter(
+            course_id=self.course_key,
+            user_id=self.user,
+            status='purchased',
+            mode='verified'
+        )
+        self.assertTrue(target_certs[0])
+        self.assertFalse(target_certs[0].refund_requested_time)
+        self.assertEquals(target_certs[0].order.status, 'purchased')
 
     def test_refund_cert_callback_before_expiration(self):
         # If the expiration date has not yet passed on a verified mode, the user can be refunded

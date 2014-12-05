@@ -1,6 +1,6 @@
-# pylint: disable=C0111
-# pylint: disable=W0621
-# pylint: disable=W0613
+# pylint: disable=missing-docstring
+# pylint: disable=redefined-outer-name
+# pylint: disable=unused-argument
 
 from lettuce import world, step
 from component_settings_editor_helpers import enter_xml_in_advanced_problem
@@ -24,7 +24,8 @@ def i_export_the_course(step):
 
 @step('I edit and enter bad XML$')
 def i_enter_bad_xml(step):
-    enter_xml_in_advanced_problem(step,
+    enter_xml_in_advanced_problem(
+        step,
         """<problem><h1>Smallest Canvas</h1>
             <p>You want to make the smallest canvas you can.</p>
             <multiplechoiceresponse>
@@ -49,6 +50,7 @@ def get_an_error_dialog(step):
 
 @step('I can click to go to the unit with the error$')
 def i_click_on_error_dialog(step):
+    world.wait_for_visible(".button.action-primary")
     world.click_link_by_text('Correct failed component')
 
     problem_string = unicode(world.scenario_dict['COURSE'].id.make_usage_key("problem", 'ignore'))

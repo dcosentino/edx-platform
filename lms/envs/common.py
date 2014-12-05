@@ -22,19 +22,18 @@ Longer TODO:
 
 # We intentionally define lots of variables that aren't used, and
 # want to import all variables from base settings files
-# pylint: disable=W0401, W0611, W0614, C0103
+# pylint: disable=wildcard-import, unused-import, unused-wildcard-import, invalid-name
 
 import sys
 import os
 import imp
-import json
 
 from path import path
 from warnings import simplefilter
+from django.utils.translation import ugettext_lazy as _
 
 from .discussionsettings import *
 from xmodule.modulestore.modulestore_settings import update_module_store_settings
-
 from lms.lib.xblock.mixin import LmsBlockMixin
 
 ################################### FEATURES ###################################
@@ -269,19 +268,6 @@ FEATURES = {
     # nonzero grade cutoff is met
     'SHOW_PROGRESS_SUCCESS_BUTTON': False,
 
-    # Analytics Data API (for active student count)
-    # Default to false here b/c dev environments won't have the api, will override in aws.py
-    'ENABLE_ANALYTICS_ACTIVE_COUNT': False,
-
-    # TODO: ECOM-136 remove this feature flag when new styles are available on main site.for
-    # Enable the new edX footer to be rendered. Defaults to false.
-    'ENABLE_NEW_EDX_FOOTER': False,
-
-    # TODO: ECOM-136
-    # Enables the new navigation template and styles. This should be enabled
-    # when the styles appropriately match the edX.org website.
-    'ENABLE_NEW_EDX_HEADER': False,
-
     # When a logged in user goes to the homepage ('/') should the user be
     # redirected to the dashboard - this is default Open edX behavior. Set to
     # False to not redirect the user
@@ -291,12 +277,28 @@ FEATURES = {
     # ENABLE_OAUTH2_PROVIDER to True
     'ENABLE_MOBILE_REST_API': False,
 
-    # Video Abstraction Layer used to allow video teams to manage video assets
-    # independently of courseware. https://github.com/edx/edx-val
-    'ENABLE_VIDEO_ABSTRACTION_LAYER_API': False,
-
     # Enable the new dashboard, account, and profile pages
     'ENABLE_NEW_DASHBOARD': False,
+
+    # Enable the combined login/registration form
+    'ENABLE_COMBINED_LOGIN_REGISTRATION': False,
+
+    # Enable organizational email opt-in
+    'ENABLE_MKTG_EMAIL_OPT_IN': False,
+
+    # Show a section in the membership tab of the instructor dashboard
+    # to allow an upload of a CSV file that contains a list of new accounts to create
+    # and register for course.
+    'ALLOW_AUTOMATED_SIGNUPS': False,
+
+    # Display demographic data on the analytics tab in the instructor dashboard.
+    'DISPLAY_ANALYTICS_DEMOGRAPHICS': True,
+
+    # Enable display of enrollment counts in instructor and legacy analytics dashboard
+    'DISPLAY_ANALYTICS_ENROLLMENTS': True,
+
+    # Separate the verification flow from the payment flow
+    'SEPARATE_VERIFICATION_FROM_PAYMENT': False,
 }
 
 # Ignore static asset files on import which match this pattern
@@ -410,9 +412,6 @@ TEMPLATE_CONTEXT_PROCESSORS = (
     # Allows the open edX footer to be leveraged in Django Templates.
     'edxmako.shortcuts.open_source_footer_context_processor',
 
-    # TODO: Used for header and footer feature flags. Remove as part of ECOM-136
-    'edxmako.shortcuts.header_footer_context_processor',
-
     # Shoppingcart processor (detects if request.user has a cart)
     'shoppingcart.context_processor.user_has_cart_context_processor',
 
@@ -519,6 +518,9 @@ EVENT_TRACKING_BACKENDS = {
 EVENT_TRACKING_PROCESSORS = [
     {
         'ENGINE': 'track.shim.LegacyFieldMappingProcessor'
+    },
+    {
+        'ENGINE': 'track.shim.VideoEventProcessor'
     }
 ]
 
@@ -537,8 +539,11 @@ if FEATURES.get('ENABLE_SQL_TRACKING_LOGS'):
     })
 
 TRACKING_SEGMENTIO_WEBHOOK_SECRET = None
-TRACKING_SEGMENTIO_ALLOWED_ACTIONS = ['Track', 'Screen']
-TRACKING_SEGMENTIO_ALLOWED_CHANNELS = ['mobile']
+TRACKING_SEGMENTIO_ALLOWED_TYPES = ['track']
+TRACKING_SEGMENTIO_SOURCE_MAP = {
+    'analytics-android': 'mobile',
+    'analytics-ios': 'mobile',
+}
 
 ######################## GOOGLE ANALYTICS ###########################
 GOOGLE_ANALYTICS_ACCOUNT = None
@@ -574,6 +579,9 @@ DOC_STORE_CONFIG = {
     'host': 'localhost',
     'db': 'xmodule',
     'collection': 'modulestore',
+    # If 'asset_collection' defined, it'll be used
+    # as the collection name for asset metadata.
+    # Otherwise, a default collection name will be used.
 }
 MODULESTORE = {
     'default': {
@@ -666,12 +674,12 @@ CONTACT_EMAIL = 'info@example.com'
 BUGS_EMAIL = 'bugs@example.com'
 UNIVERSITY_EMAIL = 'university@example.com'
 PRESS_EMAIL = 'press@example.com'
+FINANCE_EMAIL = ''
 ADMINS = ()
 MANAGERS = ADMINS
 
 # Static content
 STATIC_URL = '/static/'
-ADMIN_MEDIA_PREFIX = '/static/admin/'
 STATIC_ROOT = ENV_ROOT / "staticfiles"
 
 STATICFILES_DIRS = [
@@ -684,11 +692,14 @@ FAVICON_PATH = 'images/favicon.ico'
 # Locale/Internationalization
 TIME_ZONE = 'America/New_York'  # http://en.wikipedia.org/wiki/List_of_tz_zones_by_name
 LANGUAGE_CODE = 'en'  # http://www.i18nguy.com/unicode/language-identifiers.html
+# these languages display right to left
+LANGUAGES_BIDI = ("en@rtl", "he", "ar", "fa", "ur", "fa-ir")
 
 # Sourced from http://www.localeplanet.com/icu/ and wikipedia
 LANGUAGES = (
     ('en', u'English'),
-    ('eo', u'Dummy Language (Esperanto)'),  # Dummy language used for testing
+    ('en@rtl', u'English (right-to-left)'),
+    ('eo', u'Dummy Language (Esperanto)'),  # Dummy languaged used for testing
     ('fake2', u'Fake translations'),        # Another dummy language for testing (not pushed to prod)
 
     ('am', u'አማርኛ'),  # Amharic
@@ -1027,6 +1038,7 @@ main_vendor_js = base_vendor_js + [
 
 dashboard_js = sorted(rooted_glob(PROJECT_ROOT / 'static', 'js/dashboard/**/*.js'))
 discussion_js = sorted(rooted_glob(COMMON_ROOT / 'static', 'coffee/src/discussion/**/*.js'))
+rwd_header_footer_js = sorted(rooted_glob(PROJECT_ROOT / 'static', 'js/common_helpers/rwd_header_footer.js'))
 staff_grading_js = sorted(rooted_glob(PROJECT_ROOT / 'static', 'coffee/src/staff_grading/**/*.js'))
 open_ended_js = sorted(rooted_glob(PROJECT_ROOT / 'static', 'coffee/src/open_ended/**/*.js'))
 notes_js = sorted(rooted_glob(PROJECT_ROOT / 'static', 'coffee/src/notes/**/*.js'))
@@ -1035,7 +1047,24 @@ instructor_dash_js = sorted(rooted_glob(PROJECT_ROOT / 'static', 'coffee/src/ins
 # JavaScript used by the student account and profile pages
 # These are not courseware, so they do not need many of the courseware-specific
 # JavaScript modules.
-student_account_js = sorted(rooted_glob(PROJECT_ROOT / 'static', 'js/student_account/**/*.js'))
+student_account_js = [
+    'js/utils/rwd_header_footer.js',
+    'js/utils/edx.utils.validate.js',
+    'js/src/utility.js',
+    'js/student_account/enrollment.js',
+    'js/student_account/emailoptin.js',
+    'js/student_account/shoppingcart.js',
+    'js/student_account/models/LoginModel.js',
+    'js/student_account/models/RegisterModel.js',
+    'js/student_account/models/PasswordResetModel.js',
+    'js/student_account/views/FormView.js',
+    'js/student_account/views/LoginView.js',
+    'js/student_account/views/RegisterView.js',
+    'js/student_account/views/PasswordResetView.js',
+    'js/student_account/views/AccessView.js',
+    'js/student_account/accessApp.js',
+]
+
 student_profile_js = sorted(rooted_glob(PROJECT_ROOT / 'static', 'js/student_profile/**/*.js'))
 
 PIPELINE_CSS = {
@@ -1079,6 +1108,25 @@ PIPELINE_CSS = {
         ],
         'output_filename': 'css/lms-style-app-extend2.css',
     },
+    'style-app-rtl': {
+        'source_filenames': [
+            'sass/application-rtl.css',
+            'sass/ie-rtl.css'
+        ],
+        'output_filename': 'css/lms-style-app-rtl.css',
+    },
+    'style-app-extend1-rtl': {
+        'source_filenames': [
+            'sass/application-extend1-rtl.css',
+        ],
+        'output_filename': 'css/lms-style-app-extend1-rtl.css',
+    },
+    'style-app-extend2-rtl': {
+        'source_filenames': [
+            'sass/application-extend2-rtl.css',
+        ],
+        'output_filename': 'css/lms-style-app-extend2-rtl.css',
+    },
     'style-course-vendor': {
         'source_filenames': [
             'js/vendor/CodeMirror/codemirror.css',
@@ -1093,6 +1141,13 @@ PIPELINE_CSS = {
             'xmodule/modules.css',
         ],
         'output_filename': 'css/lms-style-course.css',
+    },
+    'style-course-rtl': {
+        'source_filenames': [
+            'sass/course-rtl.css',
+            'xmodule/modules.css',
+        ],
+        'output_filename': 'css/lms-style-course-rtl.css',
     },
     'style-xmodule-annotations': {
         'source_filenames': [
@@ -1179,6 +1234,10 @@ PIPELINE_JS = {
         'source_filenames': dashboard_js,
         'output_filename': 'js/dashboard.js'
     },
+    'rwd_header_footer': {
+        'source_filenames': rwd_header_footer_js,
+        'output_filename': 'js/rwd_header_footer.js'
+    },
     'student_account': {
         'source_filenames': student_account_js,
         'output_filename': 'js/student_account.js'
@@ -1223,7 +1282,7 @@ STATICFILES_IGNORE_PATTERNS = (
     "common_static",
 )
 
-PIPELINE_UGLIFYJS_BINARY='node_modules/.bin/uglifyjs'
+PIPELINE_UGLIFYJS_BINARY = 'node_modules/.bin/uglifyjs'
 
 # Setting that will only affect the edX version of django-pipeline until our changes are merged upstream
 PIPELINE_COMPILE_INPLACE = True
@@ -1313,6 +1372,10 @@ BULK_EMAIL_LOG_SENT_EMAILS = False
 # parallel, and what the SES rate is.
 BULK_EMAIL_RETRY_DELAY_BETWEEN_SENDS = 0.02
 
+############################# Email Opt In ####################################
+
+# Minimum age for organization-wide email opt in
+EMAIL_OPTIN_MINIMUM_AGE = 13
 
 ############################## Video ##########################################
 
@@ -1460,6 +1523,9 @@ INSTALLED_APPS = (
 
     # edX Mobile API
     'mobile_api',
+
+    # Surveys
+    'survey',
 )
 
 ######################### MARKETING SITE ###############################
@@ -1520,6 +1586,7 @@ REGISTRATION_EXTRA_FIELDS = {
     'mailing_address': 'optional',
     'goals': 'optional',
     'honor_code': 'required',
+    'terms_of_service': 'hidden',
     'city': 'hidden',
     'country': 'hidden',
 }
@@ -1811,30 +1878,26 @@ ADVANCED_SECURITY_CONFIG = {}
 SHIBBOLETH_DOMAIN_PREFIX = 'shib:'
 OPENID_DOMAIN_PREFIX = 'openid:'
 
-### Analytics data api settings
+### Analytics Data API + Dashboard (Insights) settings
 ANALYTICS_DATA_URL = ""
 ANALYTICS_DATA_TOKEN = ""
 ANALYTICS_DASHBOARD_URL = ""
 ANALYTICS_DASHBOARD_NAME = PLATFORM_NAME + " Insights"
 
-# TODO (ECOM-16): Remove once the A/B test of auto-registration completes
-AUTO_REGISTRATION_AB_TEST_EXCLUDE_COURSES = set([
-    "HarvardX/SW12.2x/1T2014",
-    "HarvardX/SW12.3x/1T2014",
-    "HarvardX/SW12.4x/1T2014",
-    "HarvardX/SW12.5x/2T2014",
-    "HarvardX/SW12.6x/2T2014",
-    "HarvardX/HUM2.1x/3T2014",
-    "HarvardX/SW12x/2013_SOND",
-    "LinuxFoundationX/LFS101x/2T2014",
-    "HarvardX/CS50x/2014_T1",
-    "HarvardX/AmPoX.1/2014_T3",
-    "HarvardX/SW12.7x/3T2014",
-    "HarvardX/SW12.10x/1T2015",
-    "HarvardX/SW12.9x/3T2014",
-    "HarvardX/SW12.8x/3T2014",
-])
-
 # REGISTRATION CODES DISPLAY INFORMATION SUBTITUTIONS IN THE INVOICE ATTACHMENT
 INVOICE_CORP_ADDRESS = "Please place your corporate address\nin this configuration"
 INVOICE_PAYMENT_INSTRUCTIONS = "This is where you can\nput directions on how people\nbuying registration codes"
+
+# Country code overrides
+# Used by django-countries
+COUNTRIES_OVERRIDE = {
+    "TW": _("Taiwan"),
+}
+
+# which access.py permission name to check in order to determine if a course is visible in
+# the course catalog. We default this to the legacy permission 'see_exists'.
+COURSE_CATALOG_VISIBILITY_PERMISSION = 'see_exists'
+
+# which access.py permission name to check in order to determine if a course about page is
+# visible. We default this to the legacy permission 'see_exists'.
+COURSE_ABOUT_VISIBILITY_PERMISSION = 'see_exists'
