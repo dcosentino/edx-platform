@@ -1460,6 +1460,9 @@ INSTALLED_APPS = (
 
     # edX Mobile API
     'mobile_api',
+
+    # Communication API
+    'ecoapi',
 )
 
 ######################### MARKETING SITE ###############################
