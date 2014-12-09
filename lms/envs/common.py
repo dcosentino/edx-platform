@@ -1509,6 +1509,9 @@ INSTALLED_APPS = (
 
     # Surveys
     'survey',
+
+    # Communication API
+    'ecoapi',
 )
 
 ######################### MARKETING SITE ###############################
