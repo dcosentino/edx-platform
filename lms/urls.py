@@ -566,5 +566,5 @@ urlpatterns += (
 
 # Communication API
 urlpatterns += (
-    url(r'^ecoapi/', include('webapi.urls')),
+    url(r'^ecoapi/', include('ecoapi.urls')),
 )

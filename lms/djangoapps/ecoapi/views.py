@@ -1,17 +1,16 @@
 #-*- coding: utf-8 -*-
 import datetime, json
 from django.http import HttpResponse
+from django.shortcuts import render_to_response, get_object_or_404
 from django.conf import settings
 
-
+from models import *
 
 class JsonResponse(HttpResponse):
     def __init__(self, content={}, mimetype=None, status=None,
              content_type='application/json'):
         super(JsonResponse, self).__init__(json.dumps(content), mimetype=mimetype,
                                            status=status, content_type=content_type)
-
-
 
 
 
@@ -27,19 +26,24 @@ def heartbeat(request):
 
 def teacher(request, id_teacher):
 
-    risposta = {
-        "name": "Darth Vader",
-        "imageUrl":"http:a.b.c/images/me.jpg",
-        "desc": [
-            {
-                "language":"en",
-                "label":"Darth is a very populair guy, despite his appearance"
-            },
-            {
-                "language":"fr",
-                "label":"Darth est un gars très populaire, malgré  son apparence"
+    teacher = get_object_or_404(Teacher, id=id_teacher)
+    name = u'%s %s' % (teacher.first_name, teacher.last_name)
+    if teacher.image:
+        imageurl = teacher.image.url # TODO: prefisso col dominio
+    else:
+        imageurl = ''
+
+    descriptions = []
+    for d in teacher.teacherdescription_set.all():
+        descriptions.append(
+            { "language": d.language,
+              "label": d.label
             }
-        ]
+        )
+    risposta = {
+        "name": name,
+        "imageUrl": imageurl,
+        "desc": descriptions
     }
     return JsonResponse(risposta)
 
