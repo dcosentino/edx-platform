@@ -18,6 +18,8 @@ urlpatterns = ('',  # nopep8
     url(r'^dashboard$', 'student.views.dashboard', name="dashboard"),
     url(r'^login_ajax$', 'student.views.login_user', name="login"),
     url(r'^login_ajax/(?P<error>[^/]*)$', 'student.views.login_user'),
+    url(r'^login$', 'student.views.signin_user', name="signin_user"),
+    url(r'^register$', 'student.views.register_user', name="register_user"),
 
     url(r'^admin_dashboard$', 'dashboard.views.dashboard'),
 
@@ -31,6 +33,7 @@ urlpatterns = ('',  # nopep8
     url(r'^segmentio/event$', 'track.views.segmentio.segmentio_event'),
     url(r'^t/(?P<template>[^/]*)$', 'static_template_view.views.index'),   # TODO: Is this used anymore? What is STATIC_GRAB?
 
+    url(r'^accounts/login$', 'student.views.accounts_login', name="accounts_login"),
     url(r'^accounts/manage_user_standing', 'student.views.manage_user_standing',
         name='manage_user_standing'),
     url(r'^accounts/disable_account_ajax$', 'student.views.disable_account_ajax',
@@ -57,7 +60,7 @@ urlpatterns = ('',  # nopep8
 
     url(r'^heartbeat$', include('heartbeat.urls')),
 
-    url(r'^user_api/', include('user_api.urls')),
+    url(r'^user_api/', include('openedx.core.djangoapps.user_api.urls')),
 
     url(r'^notifier_api/', include('notifier_api.urls')),
 
@@ -74,21 +77,6 @@ urlpatterns = ('',  # nopep8
     url(r'^enrollment/v0/', include('enrollment.urls')),
 
 )
-
-if settings.FEATURES["ENABLE_COMBINED_LOGIN_REGISTRATION"]:
-    # Backwards compatibility with old URL structure, but serve the new views
-    urlpatterns += (
-        url(r'^login$', 'student_account.views.login_and_registration_form', {'initial_mode': 'login'}, name="signin_user"),
-        url(r'^register$', 'student_account.views.login_and_registration_form', {'initial_mode': 'register'}, name="register_user"),
-        url(r'^accounts/login$', 'student_account.views.login_and_registration_form', {'initial_mode': 'login'}, name="accounts_login"),
-    )
-else:
-    # Serve the old views
-    urlpatterns += (
-        url(r'^login$', 'student.views.signin_user', name="signin_user"),
-        url(r'^register$', 'student.views.register_user', name="register_user"),
-        url(r'^accounts/login$', 'student.views.accounts_login', name="accounts_login"),
-    )
 
 if settings.FEATURES["ENABLE_MOBILE_REST_API"]:
     urlpatterns += (
@@ -355,21 +343,21 @@ if settings.COURSEWARE_ENABLED:
 
         # Cohorts management
         url(r'^courses/{}/cohorts$'.format(settings.COURSE_KEY_PATTERN),
-            'course_groups.views.list_cohorts', name="cohorts"),
+            'openedx.core.djangoapps.course_groups.views.list_cohorts', name="cohorts"),
         url(r'^courses/{}/cohorts/add$'.format(settings.COURSE_KEY_PATTERN),
-            'course_groups.views.add_cohort',
+            'openedx.core.djangoapps.course_groups.views.add_cohort',
             name="add_cohort"),
         url(r'^courses/{}/cohorts/(?P<cohort_id>[0-9]+)$'.format(settings.COURSE_KEY_PATTERN),
-            'course_groups.views.users_in_cohort',
+            'openedx.core.djangoapps.course_groups.views.users_in_cohort',
             name="list_cohort"),
         url(r'^courses/{}/cohorts/(?P<cohort_id>[0-9]+)/add$'.format(settings.COURSE_KEY_PATTERN),
-            'course_groups.views.add_users_to_cohort',
+            'openedx.core.djangoapps.course_groups.views.add_users_to_cohort',
             name="add_to_cohort"),
         url(r'^courses/{}/cohorts/(?P<cohort_id>[0-9]+)/delete$'.format(settings.COURSE_KEY_PATTERN),
-            'course_groups.views.remove_user_from_cohort',
+            'openedx.core.djangoapps.course_groups.views.remove_user_from_cohort',
             name="remove_from_cohort"),
         url(r'^courses/{}/cohorts/debug$'.format(settings.COURSE_KEY_PATTERN),
-            'course_groups.views.debug_cohort_mgmt',
+            'openedx.core.djangoapps.course_groups.views.debug_cohort_mgmt',
             name="debug_cohort_mgmt"),
 
         # Open Ended Notifications
