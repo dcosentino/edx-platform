@@ -24,11 +24,8 @@ def heartbeat(request):
     return JsonResponse(risposta)
 
 
-def teacher(request, id_teacher):
-
-    # TODO: usare l'id corretto
-
-    teacher = get_object_or_404(Teacher, id=id_teacher)
+def teacher_view(request, id_teacher):
+    teacher = get_object_or_404(Teacher, id_teacher=id_teacher)
     name = u'%s %s' % (teacher.first_name, teacher.last_name)
     if teacher.image:
         imageurl = teacher.image.url # TODO: prefisso col dominio
@@ -51,27 +48,25 @@ def teacher(request, id_teacher):
 
 
 def user_courses(request, id_user):
+    from courseware import grades
 
-    risposta =  [
-        {
-            "id": "0470F4C2DCEB689A",
-            "progressPercentage": 25, 
-            "spentTime": 36000, 
-            "viewCount": 3, 
-            "firstViewDate": "2014-10-14T06:00:00Z", 
-            "lastViewDate": "2014-10-14T06:10:00Z", 
-            "completedDate": "" 
-            
-        },
+
+    user = User.objects.get(id=int(id_user))
+
+    courses = user.student.courseenrollment_set.all()
+    risposta = []
+    for course in courses:
+        grade_summary = grades.grade(student, request, course)
+        risposta.append(
+            {
+                "id": "0470F4C2DCEB689A",
+                "progressPercentage": grade_summary['percent'], 
+                "spentTime": 36000, 
+                "viewCount": 3, 
+                "firstViewDate": "2014-10-14T06:00:00Z", 
+                "lastViewDate": "2014-10-14T06:10:00Z", 
+                "completedDate": "" 
+            }            
+        )
         
-        {
-            "id": "0470F",
-            "currentpill":3 , 
-            "spentTime": 36000, 
-            "viewCount": 3, 
-            "firstViewDate": "2014-10-14T06:00:00Z", 
-            "lastViewDate": "2014-10-14T06:10:00Z", 
-            "completedDate": "" 
-        }
-    ]
     return JsonResponse(risposta)
