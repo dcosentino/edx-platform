@@ -26,12 +26,14 @@ def heartbeat(request):
 
 def teacher(request, id_teacher):
 
+    # TODO: usare l'id corretto
+
     teacher = get_object_or_404(Teacher, id=id_teacher)
     name = u'%s %s' % (teacher.first_name, teacher.last_name)
     if teacher.image:
         imageurl = teacher.image.url # TODO: prefisso col dominio
     else:
-        imageurl = ''
+        imageurl = '' # TODO: mettiamo un placeholder?
 
     descriptions = []
     for d in teacher.teacherdescription_set.all():
