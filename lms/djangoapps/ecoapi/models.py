@@ -36,9 +36,11 @@ LINGUE = (
 )
 
 class Teacher(models.Model):
+    # Internal id of the teacher. This id can be obtained from the OAI­PMH ListRecords response, which gives teacher information in vcard format.
+    id_teacher = models.CharField(max_length=64, unique=True) 
     first_name = models.CharField(max_length=64)
     last_name = models.CharField(max_length=64)
-    image = models.ImageField(max_length=1024, upload_to=sanitized_upload_to)
+    image = models.URLField(max_length=1024, null=True, blank=True, help_text='URL of the teacher\'s image')
 
 class TeacherDescription(models.Model):
     teacher = models.ForeignKey(Teacher)
