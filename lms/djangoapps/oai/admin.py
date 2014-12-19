@@ -18,7 +18,7 @@ class TaskMetaAdmin(admin.ModelAdmin):
 admin.site.register(TaskMeta, TaskMetaAdmin)
 
 admin.site.register(OaiSource, OaiSourceAdmin)
-admin.site.register(OaiRecord)
+admin.site.register(OaiRecord,OaiRecordAdmin)
 admin.site.register(OaiSet)
 admin.site.register(OaiFormat)
 admin.site.register(ResumptionToken)

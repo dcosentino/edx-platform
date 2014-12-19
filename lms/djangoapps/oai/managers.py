@@ -8,7 +8,7 @@ class OaiRecordManager(models.Manager):
     http://www.openarchives.org/OAI/openarchivesprotocol.html#DeletedRecords
     """
 
-    def get_queryset(self):
+    def get_query_set(self):
         if self.model:
             return OaiRecordQuerySet(self.model, using=self._db).filter(
                 date_removed__isnull=True
@@ -16,11 +16,11 @@ class OaiRecordManager(models.Manager):
 
     def all_with_deleted(self):
         if self.model:
-            return super(OaiRecordManager, self).get_queryset()
+            return super(OaiRecordManager, self).get_query_set()
 
     def only_deleted(self):
         if self.model:
-            return super(OaiRecordManager, self).get_queryset().filter(
+            return super(OaiRecordManager, self).get_query_set().filter(
                 date_removed__isnull=False
             )
 
@@ -30,4 +30,4 @@ class OaiRecordManager(models.Manager):
     def filter(self, *args, **kwargs):
         if "pk" in kwargs:
             return self.all_with_deleted().filter(*args, **kwargs)
-        return self.get_queryset().filter(*args, **kwargs)
+        return self.get_query_set().filter(*args, **kwargs)

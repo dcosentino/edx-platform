@@ -4,6 +4,7 @@ from __future__ import unicode_literals
 from django.contrib import admin
 from django.db import models
 from django.core.exceptions import ObjectDoesNotExist
+from django.utils import timezone as DTZ
 from djcelery.models import TaskMeta, PeriodicTask, TaskState
 
 import hashlib
@@ -110,16 +111,17 @@ class OaiRecord(models.Model):
 
     date_removed = models.DateTimeField(null=True, blank=True)
 
-    objects = managers.OaiRecordManager()
+    # For now all query need to show also deleted object so this custom managers is not really used
+    #objects = managers.OaiRecordManager()
 
     def deleted(self):
         return self.date_removed is not None
     deleted.boolean = False
 
     def delete(self):
-        now = timezone.now()
-        self.date_removed = now
-        self.last_modified = now
+        savenow = DTZ.now()
+        self.date_removed = savenow
+        self.last_modified = savenow
         self.save()
 
     def __unicode__(self):
@@ -132,7 +134,7 @@ class OaiRecordAdmin(admin.ModelAdmin):
     """
 
     list_display = ("id", "__unicode__", "deleted")
-    list_display_filter = ("deleted",)
+    list_filter = ("deleted",)
 
     def queryset(self, request):
         qs = self.model._default_manager.all_with_deleted()
