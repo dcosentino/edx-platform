@@ -1509,9 +1509,6 @@ INSTALLED_APPS = (
 
     # Surveys
     'survey',
-
-    # Communication API
-    'ecoapi',
 )
 
 ######################### MARKETING SITE ###############################
@@ -1616,6 +1613,9 @@ LINKEDIN_API = {
 
 ############################# OAI-PMH Integration #############################
 INSTALLED_APPS += ('oai',)
+
+############################## Communication API ##############################
+INSTALLED_APPS += ('ecoapi',)
 
 
 ############################ ORA 2 ############################################

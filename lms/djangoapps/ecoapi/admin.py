@@ -9,7 +9,7 @@ class TeacherDescriptionInline(admin.TabularInline):
     extra = 1
 
 class TeacherAdmin(admin.ModelAdmin):
-    list_display = ['first_name', 'last_name']
+    list_display = ['id_teacher', 'first_name', 'last_name', 'image']
     list_display_links = ['first_name', 'last_name']
     inlines = [TeacherDescriptionInline]
 

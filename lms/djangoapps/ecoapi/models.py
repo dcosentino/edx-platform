@@ -42,6 +42,10 @@ class Teacher(models.Model):
     last_name = models.CharField(max_length=64)
     image = models.URLField(max_length=1024, null=True, blank=True, help_text='URL of the teacher\'s image')
 
+
+    def __unicode__(self):
+        return u'%s %s' % (self.first_name, self.last_name)
+
 class TeacherDescription(models.Model):
     teacher = models.ForeignKey(Teacher)
     language = models.CharField(max_length=2, choices=LINGUE)
