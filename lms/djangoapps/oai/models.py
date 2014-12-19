@@ -8,7 +8,7 @@ from djcelery.models import TaskMeta, PeriodicTask, TaskState
 import hashlib
 
 from oai.utils import nstr, ndt
-from oai.settings import OWN_SET_PREFIX,RESUMPTION_TOKEN_SALT
+from oai.settings import OWN_SET_PREFIX,RESUMPTION_TOKEN_SALT,DISABLE_PRINT_OWN_SET_PREFIX
 
 # An OAI data provider
 class OaiSource(models.Model):
@@ -60,7 +60,10 @@ class OaiSet(models.Model):
         prefix = OWN_SET_PREFIX
         if self.source:
             prefix = self.source.prefix
-        return prefix+':'+self.name
+        if prefix == OWN_SET_PREFIX and DISABLE_PRINT_OWN_SET_PREFIX:
+            return self.name
+        else:
+            return prefix+':'+self.name
     @staticmethod
     def byRepresentation(name):
         """
