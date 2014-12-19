@@ -15,7 +15,7 @@ RESULTS_LIMIT = 100
 RESUMPTION_TOKEN_VALIDITY = timedelta(hours=6)
 METADATA_FORMAT = 'oai_dc'
 OWN_SET_PREFIX = settings.PLATFORM_NAME
-DISABLE_PRINT_OWN_SET_PREFIX= False
+DISABLE_PRINT_OWN_SET_PREFIX= True
 RESUMPTION_TOKEN_SALT = 'change_me' # salt used to generate resumption tokens
 
 if hasattr(settings, 'OAI_SETTINGS'):

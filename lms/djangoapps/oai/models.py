@@ -1,6 +1,7 @@
 # -*- encoding: utf-8 -*-
 from __future__ import unicode_literals
 
+from django.contrib import admin
 from django.db import models
 from django.core.exceptions import ObjectDoesNotExist
 from djcelery.models import TaskMeta, PeriodicTask, TaskState
@@ -9,6 +10,8 @@ import hashlib
 
 from oai.utils import nstr, ndt
 from oai.settings import OWN_SET_PREFIX,RESUMPTION_TOKEN_SALT,DISABLE_PRINT_OWN_SET_PREFIX
+from oai import managers
+from time import timezone
 
 # An OAI data provider
 class OaiSource(models.Model):
@@ -104,8 +107,40 @@ class OaiRecord(models.Model):
     metadata = models.TextField()
     # Last updated by us
     last_modified = models.DateTimeField(auto_now=True)
+
+    date_removed = models.DateTimeField(null=True, blank=True)
+
+    objects = managers.OaiRecordManager()
+
+    def deleted(self):
+        return self.date_removed is not None
+    deleted.boolean = False
+
+    def delete(self):
+        now = timezone.now()
+        self.date_removed = now
+        self.last_modified = now
+        self.save()
+
     def __unicode__(self):
         return self.identifier
+
+
+class OaiRecordAdmin(admin.ModelAdmin):
+    """
+    Providing access to logically deleted objects
+    """
+
+    list_display = ("id", "__unicode__", "deleted")
+    list_display_filter = ("deleted",)
+
+    def queryset(self, request):
+        qs = self.model._default_manager.all_with_deleted()
+        ordering = self.ordering or ()
+        if ordering:
+            qs = qs.order_by(*ordering)
+        return qs
+
 
 # A resumption token for the output interface
 class ResumptionToken(models.Model):

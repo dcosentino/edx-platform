@@ -3,11 +3,17 @@
 {% block mainContent %}
 <GetRecord>
     <record>
+    {% if record.deleted %}
+	<header status="deleted">
+	{% else %}
     <header>
+    {% endif %}
         <identifier>{{ record.identifier }}</identifier>
         <datestamp>{% tisoformat record.timestamp %}</datestamp>{% for setspec in record.sets.all %}
         <setSpec>{{ setspec }}</setSpec>{% endfor %}
     </header>
+    {% if not record.deleted %}
     {% autoescape off %}{{ record.metadata }}{% endautoescape %}
+    {% endif %}
 </record>
 </GetRecord>{% endblock mainContent %}
