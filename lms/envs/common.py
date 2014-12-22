@@ -34,7 +34,7 @@ from django.utils.translation import ugettext_lazy as _
 
 from .discussionsettings import *
 from xmodule.modulestore.modulestore_settings import update_module_store_settings
-from lms.lib.xblock.mixin import LmsBlockMixin
+from lms.djangoapps.lms_xblock.mixin import LmsBlockMixin
 
 ################################### FEATURES ###################################
 # The display name of the platform to be used in templates/emails/etc.
@@ -272,6 +272,11 @@ FEATURES = {
     # redirected to the dashboard - this is default Open edX behavior. Set to
     # False to not redirect the user
     'ALWAYS_REDIRECT_HOMEPAGE_TO_DASHBOARD_FOR_AUTHENTICATED_USER': True,
+
+    # When a user goes to the homepage ('/') the user see the
+    # courses listed in the announcement dates order - this is default Open edX behavior.
+    # Set to True to change the course sorting behavior by their start dates, latest first.
+    'ENABLE_COURSE_SORTING_BY_START_DATE': False,
 
     # Expose Mobile REST API. Note that if you use this, you must also set
     # ENABLE_OAUTH2_PROVIDER to True
@@ -1160,7 +1165,7 @@ PIPELINE_JS = {
     'application': {
 
         # Application will contain all paths not in courseware_only_js
-        'source_filenames': sorted(common_js) + sorted(project_js) + [
+        'source_filenames': ['js/xblock/core.js'] + sorted(common_js) + sorted(project_js) + [
             'js/form.ext.js',
             'js/my_courses_dropdown.js',
             'js/toggle_login_modal.js',
@@ -1509,6 +1514,8 @@ INSTALLED_APPS = (
 
     # Surveys
     'survey',
+
+    'lms.djangoapps.lms_xblock',
 )
 
 ######################### MARKETING SITE ###############################

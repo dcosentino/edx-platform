@@ -15,7 +15,7 @@ from django.conf import settings
 from django_future.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 from django.views.decorators.cache import cache_control
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ValidationError, PermissionDenied
 from django.core.mail.message import EmailMessage
 from django.db import IntegrityError
 from django.core.urlresolvers import reverse
@@ -25,7 +25,9 @@ from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseForbid
 from django.utils.html import strip_tags
 import string  # pylint: disable=deprecated-module
 import random
+import unicodecsv
 import urllib
+from util.file import store_uploaded_file, course_and_time_based_filename_generator, FileValidationException, UniversalNewlineIterator
 from util.json_request import JsonResponse
 from instructor.views.instructor_task_helpers import extract_email_features, extract_task_features
 
@@ -647,7 +649,7 @@ def modify_access(request, course_id):
     rolename = request.GET.get('rolename')
     action = request.GET.get('action')
 
-    if not rolename in ['instructor', 'staff', 'beta']:
+    if rolename not in ['instructor', 'staff', 'beta']:
         return HttpResponseBadRequest(strip_tags(
             "unknown rolename '{}'".format(rolename)
         ))
@@ -710,7 +712,7 @@ def list_course_role_members(request, course_id):
 
     rolename = request.GET.get('rolename')
 
-    if not rolename in ['instructor', 'staff', 'beta']:
+    if rolename not in ['instructor', 'staff', 'beta']:
         return HttpResponseBadRequest()
 
     def extract_user_info(user):
@@ -954,6 +956,51 @@ def get_students_features(request, course_id, csv=False):  # pylint: disable=red
         except AlreadyRunningError:
             already_running_status = _("An enrolled student profile report generation task is already in progress. Check the 'Pending Instructor Tasks' table for the status of the task. When completed, the report will be available for download in the table below.")
             return JsonResponse({"status": already_running_status})
+
+
+@ensure_csrf_cookie
+@cache_control(no_cache=True, no_store=True, must_revalidate=True)
+@require_POST
+@require_level('staff')
+def add_users_to_cohorts(request, course_id):
+    """
+    View method that accepts an uploaded file (using key "uploaded-file")
+    containing cohort assignments for users. This method spawns a celery task
+    to do the assignments, and a CSV file with results is provided via data downloads.
+    """
+    course_key = SlashSeparatedCourseKey.from_string(course_id)
+
+    try:
+        def validator(file_storage, file_to_validate):
+            """
+            Verifies that the expected columns are present.
+            """
+            with file_storage.open(file_to_validate) as f:
+                reader = unicodecsv.reader(UniversalNewlineIterator(f), encoding='utf-8')
+                try:
+                    fieldnames = next(reader)
+                except StopIteration:
+                    fieldnames = []
+                msg = None
+                if "cohort" not in fieldnames:
+                    msg = _("The file must contain a 'cohort' column containing cohort names.")
+                elif "email" not in fieldnames and "username" not in fieldnames:
+                    msg = _("The file must contain a 'username' column, an 'email' column, or both.")
+                if msg:
+                    raise FileValidationException(msg)
+
+        __, filename = store_uploaded_file(
+            request, 'uploaded-file', ['.csv'],
+            course_and_time_based_filename_generator(course_key, "cohorts"),
+            max_file_size=2000000,  # limit to 2 MB
+            validator=validator
+        )
+        # The task will assume the default file storage.
+        instructor_task.api.submit_cohort_students(request, course_key, filename)
+    except (FileValidationException, PermissionDenied) as err:
+        return JsonResponse({"error": unicode(err)}, status=400)
+
+    return JsonResponse()
 
 
 @ensure_csrf_cookie
@@ -1289,7 +1336,7 @@ def get_distribution(request, course_id):
 
     available_features = instructor_analytics.distributions.AVAILABLE_PROFILE_FEATURES
     # allow None so that requests for no feature can list available features
-    if not feature in available_features + (None,):
+    if feature not in available_features + (None,):
         return HttpResponseBadRequest(strip_tags(
             "feature '{}' not available.".format(feature)
         ))
@@ -1302,7 +1349,7 @@ def get_distribution(request, course_id):
     }
 
     p_dist = None
-    if not feature is None:
+    if feature is not None:
         p_dist = instructor_analytics.distributions.profile_distribution(course_id, feature)
         response_payload['feature_results'] = {
             'feature': p_dist.feature,
@@ -1636,7 +1683,7 @@ def list_forum_members(request, course_id):
         return HttpResponseBadRequest("Operation requires instructor access.")
 
     # filter out unsupported for roles
-    if not rolename in [FORUM_ROLE_ADMINISTRATOR, FORUM_ROLE_MODERATOR, FORUM_ROLE_COMMUNITY_TA]:
+    if rolename not in [FORUM_ROLE_ADMINISTRATOR, FORUM_ROLE_MODERATOR, FORUM_ROLE_COMMUNITY_TA]:
         return HttpResponseBadRequest(strip_tags(
             "Unrecognized rolename '{}'.".format(rolename)
         ))
@@ -1760,7 +1807,7 @@ def update_forum_role_membership(request, course_id):
     if rolename == FORUM_ROLE_ADMINISTRATOR and not has_instructor_access:
         return HttpResponseBadRequest("Operation requires instructor access.")
 
-    if not rolename in [FORUM_ROLE_ADMINISTRATOR, FORUM_ROLE_MODERATOR, FORUM_ROLE_COMMUNITY_TA]:
+    if rolename not in [FORUM_ROLE_ADMINISTRATOR, FORUM_ROLE_MODERATOR, FORUM_ROLE_COMMUNITY_TA]:
         return HttpResponseBadRequest(strip_tags(
             "Unrecognized rolename '{}'.".format(rolename)
         ))
