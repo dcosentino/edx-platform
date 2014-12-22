@@ -57,11 +57,12 @@ def user_courses(request, eco_user_id):
     from courseware.models import StudentModule
     from courseware.courses import get_course_by_id
     from social.apps.django_app.default.models import UserSocialAuth
-    
+    from django.utils.timezone import UTC
+
     usa = get_object_or_404(UserSocialAuth, uid=eco_user_id)
     student = usa.user
     course_enrollements = student.courseenrollment_set.all()
-    now = datetime.datetime.now()
+    now = datetime.datetime.now(UTC())
     risposta = []
     for ce in course_enrollements:
         course_key = ce.course_id
