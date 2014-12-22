@@ -566,3 +566,10 @@ urlpatterns += (
     url(r'404', handler404),
     url(r'500', handler500),
 )
+
+
+
+# Communication API
+urlpatterns += (
+    url(r'^ecoapi/', include('ecoapi.urls')),
+)
