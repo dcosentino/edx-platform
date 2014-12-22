@@ -134,7 +134,7 @@ class OaiRecordAdmin(admin.ModelAdmin):
     """
 
     list_display = ("id", "__unicode__", "deleted")
-    list_filter = ("deleted",)
+    #list_filter = ("deleted",)
 
 #   Commented out as using default django manager
 #    def queryset(self, request):
