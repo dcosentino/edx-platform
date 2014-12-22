@@ -136,12 +136,13 @@ class OaiRecordAdmin(admin.ModelAdmin):
     list_display = ("id", "__unicode__", "deleted")
     list_filter = ("deleted",)
 
-    def queryset(self, request):
-        qs = self.model._default_manager.all_with_deleted()
-        ordering = self.ordering or ()
-        if ordering:
-            qs = qs.order_by(*ordering)
-        return qs
+#   Commented out as using default django manager
+#    def queryset(self, request):
+#        qs = self.model._default_manager.all_with_deleted()
+#        ordering = self.ordering or ()
+#        if ordering:
+#            qs = qs.order_by(*ordering)
+#        return qs
 
 
 # A resumption token for the output interface
