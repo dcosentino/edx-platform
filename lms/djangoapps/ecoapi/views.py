@@ -59,15 +59,14 @@ def teacher_view(request, id_teacher):
 
 
 def user_courses(request, eco_user_id):
+    risposta = []
     try:
         usa = get_object_or_404(UserSocialAuth, uid=eco_user_id)
     except Http404:
-        emptyresponse = {}
-        return JsonResponse(emptyresponse)
+        return JsonResponse(risposta)
     student = usa.user
     course_enrollements = student.courseenrollment_set.all()
     now = datetime.datetime.now(UTC())
-    risposta = []
     for ce in course_enrollements:
         course_key = ce.course_id
         course_key_str = u'%s' % course_key
