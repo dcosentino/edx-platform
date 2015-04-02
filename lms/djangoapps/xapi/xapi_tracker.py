@@ -137,6 +137,7 @@ class XapiBackend(BaseBackend):
 
         self.course_ids = set(options.get('ID_COURSES', []))
         self.base_url = options.get('BASE_URL', '')
+        self.oai_prefix = options.get('OAI_PREFIX', '')
         self.name = name
 
 
@@ -156,7 +157,7 @@ class XapiBackend(BaseBackend):
                 "objectType": "Activity",
                 "id": self.base_url + evt['event_type'], 
                 "definition": {
-                    "name": { "en-US": course_id }, # TODO: use OAI identifier instead of course_id; ex. oai:it.polimi.pok:course-v1:Polimi+MAT101+2014_M11
+                    "name": { "en-US": self.oai_prefix + course_id },
                     "type": "http://adlnet.gov/expapi/activities/course"
                 }
             }
