@@ -156,7 +156,7 @@ class XapiBackend(BaseBackend):
                 "objectType": "Activity",
                 "id": self.base_url + evt['event_type'], 
                 "definition": {
-                    "name": { "en-US": course_id },
+                    "name": { "en-US": course_id }, # TODO: use OAI identifier instead of course_id; ex. oai:it.polimi.pok:course-v1:Polimi+MAT101+2014_M11
                     "type": "http://adlnet.gov/expapi/activities/course"
                 }
             }
@@ -408,17 +408,16 @@ class XapiBackend(BaseBackend):
         ########################## END PEER ASSESSMENT #########################################
 
 
-
         # List of not recorded actions
         elif evt['event_type'] == 'page_close':
             action = None
         elif evt['event_type'] == 'problem_graded':
             action = None
-        elif re.match('$problem_check', evt['event_type']): # TODO: sistemare l'espressione
+        elif re.match('problem_check$', evt['event_type']):
             action = None
         else:
             # Only for test and debug
-            print '-> EVENT NOT MANAGED: ', evt
+            # print '-> EVENT NOT MANAGED: ', evt
             evt['time'] = evt['time'].strftime("%Y-%m-%dT%H:%M:%S")
             action = evt
         return action, obj
@@ -449,7 +448,6 @@ class XapiBackend(BaseBackend):
             except:
                 pass # No event data, just skip
 
-        print '-> RECEIVED EVENT: ', event_edx
         if course_id in self.course_ids:
             try:
                 # Sometimes we receive time as python datetime, sometimes as string...
