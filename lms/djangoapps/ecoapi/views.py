@@ -11,6 +11,10 @@ from courseware.models import StudentModule
 from courseware.courses import get_course_by_id
 from models import Teacher
 import time
+import logging
+
+
+log = logging.getLogger(__name__)
 
 class JsonResponse(HttpResponse):
     """
@@ -75,7 +79,7 @@ def user_courses(request, eco_user_id):
         course_key_str = u'%s' % course_key
         course = get_course_by_id(course_key)
         grade_summary = grades.grade(student, request, course)
-        print "Grade elabortion for course "+str(course_key_str)+" take "+str (current_milli_time() - course_start_elaboration)+" milliseconds"
+        log.info( "Grade elabortion for course "+str(course_key_str)+" take "+str (current_milli_time() - course_start_elaboration)+" milliseconds")
 
         modules = StudentModule.objects.filter(student=student, course_id=course_key)
         viewCount = modules.count()
@@ -112,5 +116,5 @@ def user_courses(request, eco_user_id):
                 "spentTime": spentTime
             }
         )
-    print "Full api elabortaion takes "+str(current_milli_time() -  start)+" milliseconds"
+    log.info("Full api elabortaion takes "+str(current_milli_time() -  start)+" milliseconds")
     return JsonResponse(risposta)
