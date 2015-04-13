@@ -13,10 +13,6 @@ from courseware.courses import get_course_by_id
 from models import Teacher
 from tasks import offline_calc
 import time
-import logging
-
-
-log = logging.getLogger(__name__)
 
 class JsonResponse(HttpResponse):
     """
@@ -76,16 +72,15 @@ def user_courses(request, eco_user_id):
     
     course_enrollements = student.courseenrollment_set.all()
     now = datetime.datetime.now(UTC())
-    current_milli_time = lambda: int(round(time.time() * 1000))
-    start = current_milli_time()
     for ce in course_enrollements:
-        course_start_elaboration = current_milli_time();
         course_key = ce.course_id
         course_key_str = u'%s' % course_key
-        course = get_course_by_id(course_key)
-        log.info( "Get course for course_key"+str(course_key_str)+" take "+str (current_milli_time() - course_start_elaboration)+" milliseconds")
+        try:
+            course = get_course_by_id(course_key)
+        except Http404:
+            # This souldn't be happen if course is delete correctly (deleting also enrollments)
+            continue
         grade_summary = optimized_grade(student,request,course)  #grades.grade(student, request, course)
-        log.info( "Grade elabortion for course "+str(course_key_str)+" take "+str (current_milli_time() - course_start_elaboration)+" milliseconds")
 
         modules = StudentModule.objects.filter(student=student, course_id=course_key)
         viewCount = modules.count()
@@ -122,7 +117,6 @@ def user_courses(request, eco_user_id):
                 "spentTime": spentTime
             }
         )
-    log.info("Full api elabortaion takes "+str(current_milli_time() -  start)+" milliseconds")
     return JsonResponse(risposta)
 
 def optimized_grade(student, request, course):
@@ -136,11 +130,10 @@ def optimized_grade(student, request, course):
     needRecalculation = False
     try:
         ocg = OfflineComputedGrade.objects.get(user=student, course_id=course.id)
-        if (ocg + datetime.timedelta(days=1)) > now :
+        if (ocg.updated + datetime.timedelta(days=1)) < now :
             offline_calc.delay(course)
         return json.loads(ocg.gradeset)        
     except OfflineComputedGrade.DoesNotExist:
-        log.info("OfflineComputedGrade DoesNotExist for "+str(student)+" in "+str(course.id))
         grade_summary = dict(percent = 0 )  # assume this and run task for calculate
         offline_calc.delay(course)
         return grade_summary
