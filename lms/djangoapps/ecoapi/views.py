@@ -1,6 +1,7 @@
 #-*- coding: utf-8 -*-
 import datetime
 import json
+from celery.task import task
 from datetime import timedelta
 from django.contrib.auth.models import User
 from django.http import HttpResponse, Http404
@@ -10,7 +11,7 @@ from social.apps.django_app.default.models import UserSocialAuth
 from courseware import grades
 from courseware.models import StudentModule , OfflineComputedGrade
 from courseware.courses import get_course_by_id
-from instructor.offline_gradecalc import student_grades
+from instructor.offline_gradecalc import student_grades , offline_grade_calculation 
 import instructor_task.api
 from models import Teacher
 import time
@@ -137,10 +138,16 @@ def optimized_grade(student, request, course):
     needRecalculation = False
     try:
         ocg = OfflineComputedGrade.objects.get(user=student, course_id=course.id)
-        #if (ocg + datetime.timedelta(days=1)) > now :
-        #    TODO call compute_grades in backgorund ---not instructor_task.api.submit_calculate_grades_csv(request, course.id)
+        if (ocg + datetime.timedelta(days=1)) > now :
+            offline_calc.delay()
         return json.loads(ocg.gradeset)        
     except OfflineComputedGrade.DoesNotExist:
+        log.info("OfflineComputedGrade DoesNotExist for "+str(student)+" in "+str(course.id))
         grade_summary = dict(percent = 0 )  # assume this and run task for calculate
-        # TODO call compute_grades in background -----not instructor_task.api.submit_calculate_grades_csv(request, course.id)
+        offline_calc.delay()
         return grade_summary
+
+@task
+def offline_calc(course):
+    log.info("Start task celery for offline_calc for "+course.id)
+    offline_grade_calculation(course.id)
