@@ -126,14 +126,14 @@ def optimized_grade(student, request, course_key):
     Update need the django command compute_grades in background
     '''
     now = datetime.datetime.now(UTC())
-    needRecalculation = False
+    task_args= [course_key]
     try:
         ocg = OfflineComputedGrade.objects.get(user=student, course_id=course_key)
         if (ocg.updated + datetime.timedelta(days=1)) < now :
-            offline_calc.apply_async(args=[course_key])
+            offline_calc.apply_async(task_args)
         return json.loads(ocg.gradeset)        
     except OfflineComputedGrade.DoesNotExist:
         grade_summary = dict(percent = 0 )  # assume this and run task for calculate
-        offline_calc.apply_async(args=[course_key])
+        offline_calc.apply_async(task_args)
         return grade_summary
 
