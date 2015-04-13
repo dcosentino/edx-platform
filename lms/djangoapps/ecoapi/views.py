@@ -126,7 +126,7 @@ def optimized_grade(student, request, course_key):
     Update need the django command compute_grades in background
     '''
     now = datetime.datetime.now(UTC())
-    task_args= [course_key]
+    task_args= [course_key.to_deprecated_string()]
     try:
         ocg = OfflineComputedGrade.objects.get(user=student, course_id=course_key)
         if (ocg.updated + datetime.timedelta(days=1)) < now :
