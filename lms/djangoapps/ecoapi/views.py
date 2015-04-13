@@ -109,7 +109,7 @@ def user_courses(request, eco_user_id):
             {
                 "id": course_key_str,  # it is a representation like u'edX/DemoX/Demo_Course'
                 "viewCount": viewCount,
-                "progressPercentage": grade_summary['percent'],
+                "progressPercentage": int( grade_summary['percent'] * 100 ),
                 # "currentPill": 3,  NOT USED because we provide progressPercentage
                 "firstViewDate": firstViewDate,  # First StudentModule created
                 "lastViewDate": lastViewDate,  # Last StudentModule modified
