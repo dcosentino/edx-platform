@@ -127,14 +127,13 @@ def optimized_grade(student, request, course_key):
     '''
     now = datetime.datetime.now(UTC())
     needRecalculation = False
-    print course_key
     try:
         ocg = OfflineComputedGrade.objects.get(user=student, course_id=course_key)
         if (ocg.updated + datetime.timedelta(days=1)) < now :
-            offline_calc.delay(course.id)
+            offline_calc.apply_async(course_key)
         return json.loads(ocg.gradeset)        
     except OfflineComputedGrade.DoesNotExist:
         grade_summary = dict(percent = 0 )  # assume this and run task for calculate
-        offline_calc.delay(course_key)
+        offline_calc.apply_async(course_key)
         return grade_summary
 
