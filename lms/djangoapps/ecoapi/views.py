@@ -80,7 +80,7 @@ def user_courses(request, eco_user_id):
         except Http404:
             # This souldn't be happen if course is delete correctly (deleting also enrollments)
             continue
-        grade_summary = optimized_grade(student,request,course)  #grades.grade(student, request, course)
+        grade_summary = optimized_grade(student,request,course_key)  #grades.grade(student, request, course)
 
         modules = StudentModule.objects.filter(student=student, course_id=course_key)
         viewCount = modules.count()
@@ -119,22 +119,22 @@ def user_courses(request, eco_user_id):
         )
     return JsonResponse(risposta)
 
-def optimized_grade(student, request, course):
+def optimized_grade(student, request, course_key):
     '''
     Similar to instructor offline_gradecal.student_grades the offline_gradecalc but we need 
     to set a periodic task to update those data with a day(?) retention.
     Update need the django command compute_grades in background
     '''
-
     now = datetime.datetime.now(UTC())
     needRecalculation = False
+    print course_key
     try:
-        ocg = OfflineComputedGrade.objects.get(user=student, course_id=course.id)
+        ocg = OfflineComputedGrade.objects.get(user=student, course_id=course_key)
         if (ocg.updated + datetime.timedelta(days=1)) < now :
             offline_calc.delay(course.id)
         return json.loads(ocg.gradeset)        
     except OfflineComputedGrade.DoesNotExist:
         grade_summary = dict(percent = 0 )  # assume this and run task for calculate
-        offline_calc.delay(course.id)
+        offline_calc.delay(course_key)
         return grade_summary
 
