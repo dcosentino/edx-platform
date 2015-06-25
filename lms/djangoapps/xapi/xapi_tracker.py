@@ -100,7 +100,7 @@ EDX2TINCAN = {
 class TrackingLog(models.Model):
     """This model defines the fields that are stored in the tracking log database."""
 
-    dtcreated = models.DateTimeField('creation date', auto_now_add=True)
+    dtcreated = models.DateTimeField('creation date')
     user_id = models.IntegerField(blank=True)
     course_id = CourseKeyField(max_length=255, blank=True)
     statement = models.TextField(blank=True)
@@ -121,7 +121,7 @@ class TrackingLog(models.Model):
 
 
 
-
+        
 class XapiBackend(BaseBackend):
     """Event tracker backend that saves to a Django database"""
 
@@ -136,6 +136,40 @@ class XapiBackend(BaseBackend):
         super(XapiBackend, self).__init__(**options)
 
         self.course_ids = set(options.get('ID_COURSES', []))
+        for c in [
+                'Polimi/GestConf101/2014_T1',
+                'course-v1:Polimi+FIS102+2014_M11',
+                'course-v1:Polimi+FIS102+2015', 
+                'course-v1:Polimi+MAT101+2015', 
+                'course-v1:Polimi+FIS101+2014_M12', 
+                'Polimi/MAT101/2014_T2',
+                'Polimi/FinAccount101/2014_T2',
+                'course-v1%3APolimi%2BMAT101%2B2015_M4/courseware/WF',
+                'course-v1:Polimi+FinAccount101+2015_M1',
+                'course-v1%3APolimi%2BMAT101%2B2015_M4/courseware/W3',
+                'course-v1%3APolimi%2BFIS102%2B2015_M4/courseware/W2',
+                'course-v1:Polimi+FIS101+2014_M11',
+                'course-v1:Polimi+GestCamb101+2015_M4',
+                'course-v1:Polimi+FIS101+2015', 
+                'course-v1:Polimi+FIS102+2014_M12',
+                'course-v1:Polimi+GestConf101+2015_M4',
+                'course-v1:Polimi+GestConf101+2014_M12',
+                'course-v1:Polimi+MAT101+2014_M11', 
+                'course-v1:Polimi+MAT101+2014_M12',
+                'course-v1:Polimi+MAT101+2015_M2',
+                'course-v1:Polimi+MAT101+2015_M4',
+                'course-v1:Polimi+FIS101+2015_M2',
+                'course-v1:Polimi+FIS101+2015_M4',
+                'course-v1:Polimi+FIS102+2015_M4',
+                'course-v1:Polimi+MANCHAN101+2015_M4', 
+                'course-v1:Polimi+FinAccount101+2015_M6',
+                'course-v1:Polimi+FinAccount101+2015_M6',
+                'course-v1:polimi+finaccount101+2015_m4',
+                'course-v1:Polimi+FinAccount101+2015_M4',
+                'Polimi/FIS101/2014_T2',
+                'course-v1:Polimi+GestConf101+2015_M2',
+        ]:
+            self.course_ids.add(c)
         self.base_url = options.get('BASE_URL', '')
         self.oai_prefix = options.get('OAI_PREFIX', '')
         self.name = name
@@ -150,7 +184,9 @@ class XapiBackend(BaseBackend):
         
         usereco = self.get_actor(evt['context']['user_id'])
           
-        if re.match('^/courses/[/\w]+/info/?', evt['event_type']):
+        #print evt['event_type'], evt['event_source'] # TODO: delete
+
+        if re.match('^/courses/.*/info/?', evt['event_type']) or re.match('^/courses/.*/about/?', evt['event_type']):
             # Learner accesses MOOC
             action = EDX2TINCAN['learner_accesses_MOOC']
             obj = {
@@ -162,8 +198,9 @@ class XapiBackend(BaseBackend):
                 }
             }
             
+        #/courses/course-v1:Polimi+GestConf101+2015_M4/courseware
         #elif evt['event_type'] == u'/courses/edX/DemoX/Demo_Course/courseware/d8a6192ade314473a78242dfeedfbf5b/edx_introduction/':
-        elif re.match('^/courses[/\w]+/courseware/\w+', evt['event_type']):
+        elif re.match('^/courses/.*/courseware/?\w*', evt['event_type']):
             action = EDX2TINCAN['learner_accesses_a_module']
             module = evt['event_type'].split('/')[-2:][0]
             obj = {
@@ -174,6 +211,7 @@ class XapiBackend(BaseBackend):
                     "type": "http://adlnet.gov/expapi/activities/module"
                 }
             }
+
 
         elif re.match('/courses[/\w]+/wiki/\w+/_create/?', evt['event_type']):
             title = None
@@ -260,6 +298,18 @@ class XapiBackend(BaseBackend):
                     "type": "http://adlnet.gov/expapi/activities/question"
                 }
             }
+        # TODO; messo perché non vedo quello lato server nei log...
+        elif evt['event_type'] == 'problem_check' and evt['event_source'] == 'browser':
+            #print evt
+            action = EDX2TINCAN['learner_answers_question']
+            obj = {
+                "objectType": "Activity",
+                "id": evt['event'], #['problem_id'],
+                "definition": {
+                    "name": { "en-US": evt['page'] },
+                    "type": "http://adlnet.gov/expapi/activities/question"
+                }
+            }
         ########################### END ASSESSMENT #############################################
 
 
@@ -278,6 +328,21 @@ class XapiBackend(BaseBackend):
                 }
             except:
                 action = None # No event data, just skip
+        elif evt['event_type'] == 'load_video' and evt['event_source'] == 'browser':
+            action = EDX2TINCAN['play_video']
+            try:
+                event = json.loads(evt['event']) # We need to do this because we receive a string instead than a dictionary
+                obj = {
+                    "objectType": "Activity",
+                    "id": evt['page'],
+                    "definition": {
+                        "name": { "en-US": event['id'] },
+                        "type": "http://activitystrea.ms/schema/1.0/video"
+                    }
+                }
+            except:
+                action = None # No event data, just skip
+
         ########################### END VIDEO ##################################################
 
         ############################ FORUM #####################################################
@@ -407,22 +472,96 @@ class XapiBackend(BaseBackend):
 
 
         ########################## END PEER ASSESSMENT #########################################
-
-
         # List of not recorded actions
+        elif evt['event_type'] == 'stop_video':
+            action = None
+        elif evt['event_type'] == 'pause_video':
+            action = None
+        elif evt['event_type'] == 'seek_video':
+            action = None
+        elif evt['event_type'] == 'speed_change_video':
+            action = None
+        elif re.search('progress', evt['event_type']):
+            action = None
+        elif re.search('goto_position', evt['event_type']):
+            action = None
+        elif evt['event_type'] == 'seq_goto':
+            action = None
+        elif evt['event_type'] == 'seq_next':
+            action = None
+        elif evt['event_type'] == 'seq_prev':
+            action = None
+        elif evt['event_type'] == 'show_transcript':
+            action = None
         elif evt['event_type'] == 'page_close':
+            action = None
+        elif evt['event_type'] == 'save_problem_success':
+            action = None
+        elif evt['event_type'] == 'hide_transcript':
+            action = None
+        elif re.search('transcript/translation/en', evt['event_type']):
+            action = None
+        elif re.search('problem_save', 'save_user_state'):
+            action = None
+        elif re.search('save_user_state', evt['event_type']):
+            action = None
+        elif re.search('problem_save', evt['event_type']) :
+            action = None
+        elif re.search('input_ajax', evt['event_type']) :
+            action = None
+        elif re.search('problem_check', evt['event_type']) :
+            action = None
+        elif re.search('problem_show', evt['event_type']) :
+            action = None
+        elif re.search('problem_reset', evt['event_type']) :
+            action = None
+        elif re.search('problem_get', evt['event_type']) :
+            action = None
+        elif re.search('reset_problem', evt['event_type']) :
+            action = None
+        elif re.search('list_instructor_tasks', evt['event_type']) :
+            action = None
+        elif re.search('instructor', evt['event_type']) :
             action = None
         elif evt['event_type'] == 'problem_graded':
             action = None
-        elif re.match('problem_check$', evt['event_type']):
+        elif evt['event_type'] == 'showanswer':
             action = None
+        elif evt['event_type'] == '/change_enrollment':
+            action = None
+        elif evt['event_type'] == '/create_account':
+            action = None
+        elif evt['event_type'] == '/accounts/login':
+            action = None
+        elif evt['event_type'] == 'edx.course.enrollment.activated':
+            action = None
+        elif evt['event_type'] == 'edx.course.enrollment.deactivated':
+            action = None
+        elif re.search('render_submission', evt['event_type']):
+            action = None
+        elif re.search('render_student_training', evt['event_type']):
+            action = None
+        elif re.search('spazio_docenti', evt['event_type']):
+            action = None
+        elif re.search('render_message', evt['event_type']):
+            action = None
+        elif re.search('render_grade', evt['event_type']):
+            action = None
+        elif re.search('render_leaderboard', evt['event_type']):
+            action = None
+        elif re.search('render_self_assessment', evt['event_type']):
+            action = None
+        elif re.search('role_plays', evt['event_type']):
+            action = None
+        elif re.search('jump_to_id', evt['event_type']):
+            action = None
+
         else:
             # Only for test and debug
-            # print '-> EVENT NOT MANAGED: ', evt
+            print '-> EVENT NOT MANAGED: ', evt['event_type']
             evt['time'] = evt['time'].strftime("%Y-%m-%dT%H:%M:%S")
             action = evt
         return action, obj
-
 
     def get_actor(self, username):
         # View http://192.168.33.10:8000/admin/default/usersocialauth/
@@ -447,6 +586,7 @@ class XapiBackend(BaseBackend):
                 event = json.loads(event_edx['event']) # We need to do this because we receive a string instead than a dictionary
                 course_id = event['POST'].get('course_id', None)[0]
             except:
+                #print 'No event data, skipping : ', event_edx
                 pass # No event data, just skip
 
         if course_id in self.course_ids:
@@ -481,3 +621,6 @@ class XapiBackend(BaseBackend):
 
             except Exception as e:  # pylint: disable=broad-except
                 log.exception(e)
+        else:
+            if course_id != '':
+                print 'Course not activated', course_id
