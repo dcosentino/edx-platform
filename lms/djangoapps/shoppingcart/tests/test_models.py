@@ -3,6 +3,7 @@ Tests for the Shopping Cart Models
 """
 from decimal import Decimal
 import datetime
+import sys
 
 import smtplib
 from boto.exception import BotoServerError  # this is a super-class of SESError and catches connection errors
@@ -39,6 +40,7 @@ from shoppingcart.exceptions import (
 )
 
 from opaque_keys.edx.locator import CourseLocator
+from util.testing import UrlResetMixin
 
 # Since we don't need any XML course fixtures, use a modulestore configuration
 # that disables the XML modulestore.
@@ -47,8 +49,11 @@ MODULESTORE_CONFIG = mixed_store_config(settings.COMMON_TEST_DATA_ROOT, {}, incl
 
 @override_settings(MODULESTORE=MODULESTORE_CONFIG)
 @ddt.ddt
-class OrderTest(ModuleStoreTestCase):
+class OrderTest(UrlResetMixin, ModuleStoreTestCase):
+    @patch.dict(settings.FEATURES, {'SEPARATE_VERIFICATION_FROM_PAYMENT': True})
     def setUp(self):
+        super(OrderTest, self).setUp('verify_student.urls')
+
         self.user = UserFactory.create()
         course = CourseFactory.create()
         self.course_key = course.id
@@ -224,6 +229,7 @@ class OrderTest(ModuleStoreTestCase):
             'STORE_BILLING_INFO': True,
         }
     )
+    @patch.dict(settings.FEATURES, {'SEPARATE_VERIFICATION_FROM_PAYMENT': False})
     def test_purchase(self):
         # This test is for testing the subclassing functionality of OrderItem, but in
         # order to do this, we end up testing the specific functionality of
@@ -233,7 +239,9 @@ class OrderTest(ModuleStoreTestCase):
         item = CertificateItem.add_to_order(cart, self.course_key, self.cost, 'honor')
         # course enrollment object should be created but still inactive
         self.assertFalse(CourseEnrollment.is_enrolled(self.user, self.course_key))
-        cart.purchase()
+        # the analytics client pipes output to stderr when using the default client
+        with patch('sys.stderr', sys.stdout.write):
+            cart.purchase()
         self.assertTrue(CourseEnrollment.is_enrolled(self.user, self.course_key))
 
         # test e-mail sending
@@ -241,11 +249,11 @@ class OrderTest(ModuleStoreTestCase):
         self.assertEquals('Order Payment Confirmation', mail.outbox[0].subject)
         self.assertIn(settings.PAYMENT_SUPPORT_EMAIL, mail.outbox[0].body)
         self.assertIn(unicode(cart.total_cost), mail.outbox[0].body)
-        self.assertIn(item.additional_instruction_text, mail.outbox[0].body)
+        self.assertIn(item.additional_instruction_text(), mail.outbox[0].body)
 
         # Assert Google Analytics event fired for purchase.
         self.mock_tracker.track.assert_called_once_with(  # pylint: disable=maybe-no-member
-            1,
+            self.user.id,
             'Completed Order',
             {
                 'orderId': 1,
@@ -264,6 +272,15 @@ class OrderTest(ModuleStoreTestCase):
             },
             context={'Google Analytics': {'clientId': None}}
         )
+
+    def test_payment_separate_from_verification_email(self):
+        cart = Order.get_cart_for_user(user=self.user)
+        item = CertificateItem.add_to_order(cart, self.course_key, self.cost, 'honor')
+        cart.purchase()
+
+        self.assertEquals(len(mail.outbox), 1)
+        # Verify that the verification reminder appears in the sent email.
+        self.assertIn(item.additional_instruction_text(), mail.outbox[0].body)
 
     def test_purchase_item_failure(self):
         # once again, we're testing against the specific implementation of
@@ -482,6 +499,8 @@ class PaidCourseRegistrationTest(ModuleStoreTestCase):
         self.assertTrue(CourseEnrollment.is_enrolled(self.user, self.course_key))
         reg1 = PaidCourseRegistration.objects.get(id=reg1.id)  # reload from DB to get side-effect
         self.assertEqual(reg1.status, "purchased")
+        self.assertIsNotNone(reg1.course_enrollment)
+        self.assertEqual(reg1.course_enrollment.id, CourseEnrollment.objects.get(user=self.user, course_id=self.course_key).id)
 
     def test_generate_receipt_instructions(self):
         """
@@ -559,6 +578,35 @@ class CertificateItemTest(ModuleStoreTestCase):
         self.mock_tracker = patcher.start()
         self.addCleanup(patcher.stop)
 
+        analytics_patcher = patch('shoppingcart.models.analytics')
+        self.mock_analytics_tracker = analytics_patcher.start()
+        self.addCleanup(analytics_patcher.stop)
+
+    def _assert_refund_tracked(self):
+        """
+        Assert that we fired a refund event.
+        """
+        self.mock_analytics_tracker.track.assert_called_with(  # pylint: disable=maybe-no-member
+            self.user.id,
+            'Refunded Order',
+            {
+                'orderId': 1,
+                'currency': 'usd',
+                'total': '40',
+                'products': [
+                    {
+                        'sku': u'CertificateItem.verified',
+                        'name': unicode(self.course_key),
+                        'category': unicode(self.course_key.org),
+                        'price': '40',
+                        'id': 1,
+                        'quantity': 1
+                    }
+                ]
+            },
+            context={'Google Analytics': {'clientId': None}}
+        )
+
     def test_existing_enrollment(self):
         CourseEnrollment.enroll(self.user, self.course_key)
         cart = Order.get_cart_for_user(user=self.user)
@@ -581,18 +629,29 @@ class CertificateItemTest(ModuleStoreTestCase):
         self.assertEquals(cert_item.single_item_receipt_template,
                           'shoppingcart/receipt.html')
 
+    @override_settings(
+        SEGMENT_IO_LMS_KEY="foobar",
+        FEATURES={
+            'SEGMENT_IO_LMS': True,
+            'STORE_BILLING_INFO': True,
+        }
+    )
     def test_refund_cert_callback_no_expiration(self):
         # When there is no expiration date on a verified mode, the user can always get a refund
-        CourseEnrollment.enroll(self.user, self.course_key, 'verified')
-        cart = Order.get_cart_for_user(user=self.user)
-        CertificateItem.add_to_order(cart, self.course_key, self.cost, 'verified')
-        cart.purchase()
 
-        CourseEnrollment.unenroll(self.user, self.course_key)
+        # need to prevent analytics errors from appearing in stderr
+        with patch('sys.stderr', sys.stdout.write):
+            CourseEnrollment.enroll(self.user, self.course_key, 'verified')
+            cart = Order.get_cart_for_user(user=self.user)
+            CertificateItem.add_to_order(cart, self.course_key, self.cost, 'verified')
+            cart.purchase()
+            CourseEnrollment.unenroll(self.user, self.course_key)
+
         target_certs = CertificateItem.objects.filter(course_id=self.course_key, user_id=self.user, status='refunded', mode='verified')
         self.assertTrue(target_certs[0])
         self.assertTrue(target_certs[0].refund_requested_time)
         self.assertEquals(target_certs[0].order.status, 'refunded')
+        self._assert_refund_tracked()
 
     def test_no_refund_on_cert_callback(self):
         # If we explicitly skip refunds, the unenroll action should not modify the purchase.
@@ -612,29 +671,39 @@ class CertificateItemTest(ModuleStoreTestCase):
         self.assertFalse(target_certs[0].refund_requested_time)
         self.assertEquals(target_certs[0].order.status, 'purchased')
 
+    @override_settings(
+        SEGMENT_IO_LMS_KEY="foobar",
+        FEATURES={
+            'SEGMENT_IO_LMS': True,
+            'STORE_BILLING_INFO': True,
+        }
+    )
     def test_refund_cert_callback_before_expiration(self):
         # If the expiration date has not yet passed on a verified mode, the user can be refunded
         many_days = datetime.timedelta(days=60)
 
         course = CourseFactory.create()
-        course_key = course.id
-        course_mode = CourseMode(course_id=course_key,
+        self.course_key = course.id
+        course_mode = CourseMode(course_id=self.course_key,
                                  mode_slug="verified",
                                  mode_display_name="verified cert",
                                  min_price=self.cost,
                                  expiration_datetime=(datetime.datetime.now(pytz.utc) + many_days))
         course_mode.save()
 
-        CourseEnrollment.enroll(self.user, course_key, 'verified')
-        cart = Order.get_cart_for_user(user=self.user)
-        CertificateItem.add_to_order(cart, course_key, self.cost, 'verified')
-        cart.purchase()
+        # need to prevent analytics errors from appearing in stderr
+        with patch('sys.stderr', sys.stdout.write):
+            CourseEnrollment.enroll(self.user, self.course_key, 'verified')
+            cart = Order.get_cart_for_user(user=self.user)
+            CertificateItem.add_to_order(cart, self.course_key, self.cost, 'verified')
+            cart.purchase()
+            CourseEnrollment.unenroll(self.user, self.course_key)
 
-        CourseEnrollment.unenroll(self.user, course_key)
-        target_certs = CertificateItem.objects.filter(course_id=course_key, user_id=self.user, status='refunded', mode='verified')
+        target_certs = CertificateItem.objects.filter(course_id=self.course_key, user_id=self.user, status='refunded', mode='verified')
         self.assertTrue(target_certs[0])
         self.assertTrue(target_certs[0].refund_requested_time)
         self.assertEquals(target_certs[0].order.status, 'refunded')
+        self._assert_refund_tracked()
 
     def test_refund_cert_callback_before_expiration_email(self):
         """ Test that refund emails are being sent correctly. """

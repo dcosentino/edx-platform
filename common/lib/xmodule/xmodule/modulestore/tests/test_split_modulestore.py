@@ -1396,6 +1396,41 @@ class TestItemCrud(SplitModuleTest):
         for _ in range(4):
             self.create_subtree_for_deletion(node_loc, category_queue[1:])
 
+    def test_split_modulestore_create_child_with_position(self):
+        """
+        This test is designed to hit a specific set of use cases having to do with
+        the child positioning logic found in split_mongo/split.py:create_child()
+        """
+        # Set up the split module store
+        store = modulestore()
+        user = random.getrandbits(32)
+        course_key = CourseLocator('test_org', 'test_transaction', 'test_run')
+        with store.bulk_operations(course_key):
+            new_course = store.create_course('test_org', 'test_transaction', 'test_run', user, BRANCH_NAME_DRAFT)
+            new_course_locator = new_course.id
+            versionless_course_locator = new_course_locator.version_agnostic()
+            first_child = store.create_child(
+                self.user_id,
+                new_course.location,
+                "chapter"
+            )
+            refetch_course = store.get_course(versionless_course_locator)
+            second_child = store.create_child(
+                self.user_id,
+                refetch_course.location,
+                "chapter",
+                position=0
+            )
+
+            # First child should have been moved to second position, and better child takes the lead
+            refetch_course = store.get_course(versionless_course_locator)
+            children = refetch_course.get_children()
+            self.assertEqual(unicode(children[1].location), unicode(first_child.location))
+            self.assertEqual(unicode(children[0].location), unicode(second_child.location))
+
+            # Clean up the data so we don't break other tests which apparently expect a particular state
+            store.delete_course(refetch_course.id, user)
+
 
 class TestCourseCreation(SplitModuleTest):
     """
@@ -1557,6 +1592,40 @@ class TestCourseCreation(SplitModuleTest):
             modulestore().create_course(
                 dupe_course_key.org, dupe_course_key.course, dupe_course_key.run, user, BRANCH_NAME_DRAFT
             )
+
+    def test_bulk_ops_get_courses(self):
+        """
+        Test get_courses when some are created, updated, and deleted w/in a bulk operation
+        """
+        # create 3 courses before bulk operation
+        split_store = modulestore()
+
+        user = random.getrandbits(32)
+        to_be_created = split_store.make_course_key('new', 'created', 'course')
+        with split_store.bulk_operations(to_be_created):
+            split_store.create_course(
+                to_be_created.org, to_be_created.course, to_be_created.run, user, master_branch=BRANCH_NAME_DRAFT,
+            )
+
+            modified_course_loc = CourseLocator(org='testx', course='GreekHero', run="run", branch=BRANCH_NAME_DRAFT)
+            with split_store.bulk_operations(modified_course_loc):
+                modified_course = modulestore().get_course(modified_course_loc)
+                modified_course.advertised_start = 'coming soon to a theater near you'
+                split_store.update_item(modified_course, user)
+
+                to_be_deleted = split_store.make_course_key("guestx", "contender", "run")
+                with split_store.bulk_operations(to_be_deleted):
+                    split_store.delete_course(to_be_deleted, user)
+
+                    # now get_courses
+                    courses = split_store.get_courses(BRANCH_NAME_DRAFT)
+
+                    self.assertEqual(len(courses), 3)
+                    course_ids = [course.id.for_branch(None) for course in courses]
+                    self.assertNotIn(to_be_deleted, course_ids)
+                    self.assertIn(to_be_created, course_ids)
+                    fetched_modified = [course for course in courses if course.id == modified_course_loc][0]
+                    self.assertEqual(fetched_modified.advertised_start, modified_course.advertised_start)
 
 
 class TestInheritance(SplitModuleTest):

@@ -211,7 +211,7 @@ class PhotoVerification(StatusModel):
         ).exists()
 
     @classmethod
-    def user_has_valid_or_pending(cls, user, earliest_allowed_date=None, window=None):
+    def user_has_valid_or_pending(cls, user, earliest_allowed_date=None, window=None, queryset=None):
         """
         Return whether the user has a complete verification attempt that is or
         *might* be good. This means that it's approved, been submitted, or would
@@ -222,15 +222,21 @@ class PhotoVerification(StatusModel):
         If window=None, this will check for the user's *initial* verification.  If
         window is anything else, this will check for the reverification associated
         with that window.
+
+        If a queryset is provided, that will be used instead of hitting the database.
         """
         valid_statuses = ['submitted', 'approved']
         if not window:
             valid_statuses.append('must_retry')
-        return cls.objects.filter(
-            user=user,
+        if queryset is None:
+            queryset = cls.objects.filter(user=user)
+
+        return queryset.filter(
             status__in=valid_statuses,
-            created_at__gte=(earliest_allowed_date
-                             or cls._earliest_allowed_date()),
+            created_at__gte=(
+                earliest_allowed_date
+                or cls._earliest_allowed_date()
+            ),
             window=window,
         ).exists()
 
@@ -293,7 +299,10 @@ class PhotoVerification(StatusModel):
                     return ('none', error_msg)
 
             if attempt.created_at < cls._earliest_allowed_date():
-                return ('expired', error_msg)
+                return (
+                    'expired',
+                    _("Your {platform_name} verification has expired.").format(platform_name=settings.PLATFORM_NAME)
+                )
 
             # If someone is denied their original verification attempt, they can try to reverify.
             # However, if a midcourse reverification is denied, that denial is permanent.
@@ -451,6 +460,9 @@ class PhotoVerification(StatusModel):
         if self.status == "approved":
             return
 
+        log.info(u"Verification for user '{user_id}' approved by '{reviewer}'.".format(
+            user_id=self.user, reviewer=user_id
+        ))
         self.error_msg = ""  # reset, in case this attempt was denied before
         self.error_code = ""  # reset, in case this attempt was denied before
         self.reviewing_user = user_id
@@ -494,6 +506,9 @@ class PhotoVerification(StatusModel):
             lets you amend the error message in case there were additional
             details to be made.
         """
+        log.info(u"Verification for user '{user_id}' denied by '{reviewer}'.".format(
+            user_id=self.user, reviewer=reviewing_user
+        ))
         self.error_msg = error_msg
         self.error_code = error_code
         self.reviewing_user = reviewing_user
@@ -610,6 +625,9 @@ class SoftwareSecurePhotoVerification(PhotoVerification):
                 if attempt.status != "approved":
                     return False
             except Exception:  # pylint: disable=broad-except
+                log.exception(
+                    u"An error occurred while checking re-verification for user '{user_id}'".format(user_id=user)
+                )
                 return False
 
         return True
@@ -727,7 +745,7 @@ class SoftwareSecurePhotoVerification(PhotoVerification):
             ("photoIdReasons", "Text not clear"): _("We couldn't read your name from your photo ID image."),
             ("generalReasons", "Name mismatch"): _("The name associated with your account and the name on your ID do not match."),
             ("userPhotoReasons", "Image not clear"): _("The image of your face was not clear."),
-            ("userPhotoReasons", "Face out of view"): _("Your face was not visible in your self-photo"),
+            ("userPhotoReasons", "Face out of view"): _("Your face was not visible in your self-photo."),
         }
 
         try:

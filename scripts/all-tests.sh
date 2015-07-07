@@ -56,7 +56,7 @@ set -e
 ###############################################################################
 
 # Violations thresholds for failing the build
-PYLINT_THRESHOLD=4600
+PYLINT_THRESHOLD=6300
 PEP8_THRESHOLD=0
 
 source $HOME/jenkins_env
@@ -190,7 +190,7 @@ END
                 # action doesn't fail the build.
                 # May be unnecessary if we changed the "Skip if there are no test files"
                 # option to True in the jenkins job definitions.
-                mkdir -p reports
+                mkdir -p reports/bok_choy
                 cat > reports/bok_choy/xunit.xml <<END
 <?xml version="1.0" encoding="UTF-8"?>
 <testsuite name="nosetests" tests="1" errors="0" failures="0" skip="0">

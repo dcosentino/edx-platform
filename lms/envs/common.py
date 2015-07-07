@@ -24,6 +24,11 @@ Longer TODO:
 # want to import all variables from base settings files
 # pylint: disable=wildcard-import, unused-import, unused-wildcard-import, invalid-name
 
+# Pylint gets confused by path.py instances, which report themselves as class
+# objects. As a result, pylint applies the wrong regex in validating names,
+# and throws spurious errors. Therefore, we disable invalid-name checking.
+# pylint: disable=invalid-name
+
 import sys
 import os
 import imp
@@ -33,6 +38,7 @@ from warnings import simplefilter
 from django.utils.translation import ugettext_lazy as _
 
 from .discussionsettings import *
+import dealer.git
 from xmodule.modulestore.modulestore_settings import update_module_store_settings
 from lms.djangoapps.lms_xblock.mixin import LmsBlockMixin
 
@@ -40,6 +46,8 @@ from lms.djangoapps.lms_xblock.mixin import LmsBlockMixin
 # The display name of the platform to be used in templates/emails/etc.
 PLATFORM_NAME = "Your Platform Name Here"
 CC_MERCHANT_NAME = PLATFORM_NAME
+# Shows up in the platform footer, eg "(c) COPYRIGHT_YEAR"
+COPYRIGHT_YEAR = "2015"
 
 PLATFORM_FACEBOOK_ACCOUNT = "http://www.facebook.com/YourPlatformFacebookAccount"
 PLATFORM_TWITTER_ACCOUNT = "@YourPlatformTwitterAccount"
@@ -183,7 +191,8 @@ FEATURES = {
 
     # Enable legacy instructor dashboard
     'ENABLE_INSTRUCTOR_LEGACY_DASHBOARD': True,
-    # Is this an edX-owned domain? (used on instructor dashboard)
+
+    # Is this an edX-owned domain? (used for edX specific messaging and images)
     'IS_EDX_DOMAIN': False,
 
     # Toggle to enable certificates of courses on dashboard
@@ -223,7 +232,7 @@ FEATURES = {
     'ENABLE_S3_GRADE_DOWNLOADS': False,
 
     # whether to use password policy enforcement or not
-    'ENFORCE_PASSWORD_POLICY': False,
+    'ENFORCE_PASSWORD_POLICY': True,
 
     # Give course staff unrestricted access to grade downloads (if set to False,
     # only edX superusers can perform the downloads)
@@ -232,10 +241,10 @@ FEATURES = {
     'ENABLED_PAYMENT_REPORTS': ["refund_report", "itemized_purchase_report", "university_revenue_share", "certificate_status"],
 
     # Turn off account locking if failed login attempts exceeds a limit
-    'ENABLE_MAX_FAILED_LOGIN_ATTEMPTS': False,
+    'ENABLE_MAX_FAILED_LOGIN_ATTEMPTS': True,
 
     # Hide any Personally Identifiable Information from application logs
-    'SQUELCH_PII_IN_LOGS': False,
+    'SQUELCH_PII_IN_LOGS': True,
 
     # Toggles the embargo functionality, which enable embargoing for particular courses
     'EMBARGO': False,
@@ -259,10 +268,10 @@ FEATURES = {
     'ENABLE_MKTG_SITE': False,
 
     # Prevent concurrent logins per user
-    'PREVENT_CONCURRENT_LOGINS': False,
+    'PREVENT_CONCURRENT_LOGINS': True,
 
-    # Turn off Advanced Security by default
-    'ADVANCED_SECURITY': False,
+    # Turn on Advanced Security by default
+    'ADVANCED_SECURITY': True,
 
     # Show a "Download your certificate" on the Progress page if the lowest
     # nonzero grade cutoff is met
@@ -304,6 +313,21 @@ FEATURES = {
 
     # Separate the verification flow from the payment flow
     'SEPARATE_VERIFICATION_FROM_PAYMENT': False,
+
+    # Show the mobile app links in the footer
+    'ENABLE_FOOTER_MOBILE_APP_LINKS': False,
+
+    # Let students save and manage their annotations
+    'ENABLE_EDXNOTES': False,
+
+    # Milestones application flag
+    'MILESTONES_APP': False,
+
+    # Prerequisite courses feature flag
+    'ENABLE_PREREQUISITE_COURSES': False,
+
+    # For easily adding modes to courses during acceptance testing
+    'MODE_CREATION_FOR_TESTING': False,
 }
 
 # Ignore static asset files on import which match this pattern
@@ -684,6 +708,16 @@ FINANCE_EMAIL = ''
 ADMINS = ()
 MANAGERS = ADMINS
 
+EDX_PLATFORM_REVISION = os.environ.get('EDX_PLATFORM_REVISION')
+
+if not EDX_PLATFORM_REVISION:
+    try:
+        # Get git revision of the current file
+        EDX_PLATFORM_REVISION = dealer.git.Backend(path=REPO_ROOT).revision
+    except TypeError:
+        # Not a git repository
+        EDX_PLATFORM_REVISION = 'unknown'
+
 # Static content
 STATIC_URL = '/static/'
 STATIC_ROOT = ENV_ROOT / "staticfiles"
@@ -894,6 +928,14 @@ MOCK_PEER_GRADING = False
 # Used for testing, debugging staff grading
 MOCK_STAFF_GRADING = False
 
+
+################################# EdxNotes config  #########################
+
+# Configure the LMS to use our stub EdxNotes implementation
+EDXNOTES_INTERFACE = {
+    'url': 'http://localhost:8120/api/v1',
+}
+
 ################################# Jasmine ##################################
 JASMINE_TEST_DIRECTORY = PROJECT_ROOT + '/static/coffee'
 
@@ -977,6 +1019,9 @@ MIDDLEWARE_CLASSES = (
     'courseware.middleware.RedirectUnenrolledMiddleware',
 
     'course_wiki.middleware.WikiAccessMiddleware',
+
+    # This must be last
+    'microsite_configuration.middleware.MicrositeSessionCookieDomainMiddleware',
 )
 
 # Clickjacking protection can be enabled by setting this to 'DENY'
@@ -1010,12 +1055,13 @@ courseware_js = (
 base_vendor_js = [
     'js/vendor/jquery.min.js',
     'js/vendor/jquery.cookie.js',
-    'js/vendor/underscore-min.js'
+    'js/vendor/url.min.js',
+    'js/vendor/underscore-min.js',
+    'js/vendor/require.js',
+    'js/RequireJS-namespace-undefine.js',
 ]
 
 main_vendor_js = base_vendor_js + [
-    'js/vendor/require.js',
-    'js/RequireJS-namespace-undefine.js',
     'js/vendor/json2.js',
     'js/vendor/jquery-ui.min.js',
     'js/vendor/jquery.qtip.min.js',
@@ -1038,7 +1084,15 @@ instructor_dash_js = sorted(rooted_glob(PROJECT_ROOT / 'static', 'coffee/src/ins
 student_account_js = [
     'js/utils/rwd_header_footer.js',
     'js/utils/edx.utils.validate.js',
+    'js/form.ext.js',
+    'js/my_courses_dropdown.js',
+    'js/toggle_login_modal.js',
+    'js/sticky_filter.js',
+    'js/query-params.js',
     'js/src/utility.js',
+    'js/src/accessibility_tools.js',
+    'js/src/ie_shim.js',
+    'js/src/string_utils.js',
     'js/student_account/enrollment.js',
     'js/student_account/emailoptin.js',
     'js/student_account/shoppingcart.js',
@@ -1054,6 +1108,31 @@ student_account_js = [
 ]
 
 student_profile_js = sorted(rooted_glob(PROJECT_ROOT / 'static', 'js/student_profile/**/*.js'))
+
+verify_student_js = [
+    'js/form.ext.js',
+    'js/my_courses_dropdown.js',
+    'js/toggle_login_modal.js',
+    'js/sticky_filter.js',
+    'js/query-params.js',
+    'js/src/utility.js',
+    'js/src/accessibility_tools.js',
+    'js/src/ie_shim.js',
+    'js/src/string_utils.js',
+    'js/verify_student/models/verification_model.js',
+    'js/verify_student/views/error_view.js',
+    'js/verify_student/views/webcam_photo_view.js',
+    'js/verify_student/views/step_view.js',
+    'js/verify_student/views/intro_step_view.js',
+    'js/verify_student/views/make_payment_step_view.js',
+    'js/verify_student/views/payment_confirmation_step_view.js',
+    'js/verify_student/views/face_photo_step_view.js',
+    'js/verify_student/views/id_photo_step_view.js',
+    'js/verify_student/views/review_photos_step_view.js',
+    'js/verify_student/views/enrollment_confirmation_step_view.js',
+    'js/verify_student/views/pay_and_verify_view.js',
+    'js/verify_student/pay_and_verify.js',
+]
 
 PIPELINE_CSS = {
     'style-vendor': {
@@ -1123,6 +1202,12 @@ PIPELINE_CSS = {
         ],
         'output_filename': 'css/lms-style-course-vendor.css',
     },
+    'style-student-notes': {
+        'source_filenames': [
+            'css/vendor/edxnotes/annotator.min.css',
+        ],
+        'output_filename': 'css/lms-style-student-notes.css',
+    },
     'style-course': {
         'source_filenames': [
             'sass/course.css',
@@ -1175,6 +1260,7 @@ PIPELINE_JS = {
             'js/src/accessibility_tools.js',
             'js/src/ie_shim.js',
             'js/src/string_utils.js',
+            'js/src/logger.js',
         ],
         'output_filename': 'js/lms-application.js',
     },
@@ -1234,6 +1320,10 @@ PIPELINE_JS = {
         'source_filenames': student_profile_js,
         'output_filename': 'js/student_profile.js'
     },
+    'verify_student': {
+        'source_filenames': verify_student_js,
+        'output_filename': 'js/verify_student.js'
+    }
 }
 
 PIPELINE_DISABLE_WRAPPER = True
@@ -1462,6 +1552,8 @@ INSTALLED_APPS = (
     'django_comment_common',
     'notes',
 
+    'edxnotes',
+
     # Splash screen
     'splash',
 
@@ -1482,6 +1574,9 @@ INSTALLED_APPS = (
 
     # Different Course Modes
     'course_modes',
+
+    # Enrollment API
+    'enrollment',
 
     # Student Identity Verification
     'verify_student',
@@ -1522,24 +1617,29 @@ INSTALLED_APPS = (
 EDXMKTG_COOKIE_NAME = 'edxloggedin'
 MKTG_URLS = {}
 MKTG_URL_LINK_MAP = {
-    'ABOUT': 'about_edx',
+    'ABOUT': 'about',
     'CONTACT': 'contact',
-    'FAQ': 'help_edx',
+    'FAQ': 'help',
     'COURSES': 'courses',
     'ROOT': 'root',
     'TOS': 'tos',
-    'HONOR': 'honor',
-    'PRIVACY': 'privacy_edx',
-    'JOBS': 'jobs',
-    'NEWS': 'news',
+    'HONOR': 'honor',  # If your site does not have an honor code, simply delete this line.
+    'PRIVACY': 'privacy',
     'PRESS': 'press',
-    'BLOG': 'edx-blog',
+    'BLOG': 'blog',
     'DONATE': 'donate',
 
     # Verified Certificates
     'WHAT_IS_VERIFIED_CERT': 'verified-certificate',
 }
 
+################# Mobile URLS ##########################
+
+# These are URLs to the app store for mobile.
+MOBILE_STORE_URLS = {
+    'apple': '#',
+    'google': '#'
+}
 
 ################# Student Verification #################
 VERIFY_STUDENT = {
@@ -1561,6 +1661,7 @@ if FEATURES.get('AUTH_USE_CAS'):
     )
     INSTALLED_APPS += ('django_cas',)
     MIDDLEWARE_CLASSES += ('django_cas.middleware.CASMiddleware',)
+
 
 ###################### Registration ##################################
 
@@ -1600,10 +1701,9 @@ PROGRESS_SUCCESS_BUTTON_URL = 'http://<domain>/<path>/{course_id}'
 PROGRESS_SUCCESS_BUTTON_TEXT_OVERRIDE = None
 
 #### PASSWORD POLICY SETTINGS #####
-
-PASSWORD_MIN_LENGTH = None
+PASSWORD_MIN_LENGTH = 8
 PASSWORD_MAX_LENGTH = None
-PASSWORD_COMPLEXITY = {}
+PASSWORD_COMPLEXITY = {"UPPER": 1, "LOWER": 1, "DIGITS": 1}
 PASSWORD_DICTIONARY_EDIT_DISTANCE_THRESHOLD = None
 PASSWORD_DICTIONARY = []
 
@@ -1846,7 +1946,10 @@ OPTIONAL_APPS = (
     'openassessment.xblock',
 
     # edxval
-    'edxval'
+    'edxval',
+
+    # milestones
+    'milestones',
 )
 
 for app_name in OPTIONAL_APPS:
@@ -1897,3 +2000,27 @@ COURSE_CATALOG_VISIBILITY_PERMISSION = 'see_exists'
 # which access.py permission name to check in order to determine if a course about page is
 # visible. We default this to the legacy permission 'see_exists'.
 COURSE_ABOUT_VISIBILITY_PERMISSION = 'see_exists'
+
+#date format the api will be formatting the datetime values
+API_DATE_FORMAT = '%Y-%m-%d'
+
+# Enrollment API Cache Timeout
+ENROLLMENT_COURSE_DETAILS_CACHE_TIMEOUT = 60
+
+# for Student Notes we would like to avoid too frequent token refreshes (default is 30 seconds)
+if FEATURES['ENABLE_EDXNOTES']:
+    OAUTH_ID_TOKEN_EXPIRATION = 60 * 60
+
+# Configuration used for generating PDF Receipts/Invoices
+PDF_RECEIPT_TAX_ID = 'add here'
+PDF_RECEIPT_FOOTER_TEXT = 'add your own specific footer text here'
+PDF_RECEIPT_DISCLAIMER_TEXT = 'add your own specific disclaimer text here'
+PDF_RECEIPT_BILLING_ADDRESS = 'add your own billing address here with appropriate line feed characters'
+PDF_RECEIPT_TERMS_AND_CONDITIONS = 'add your own terms and conditions'
+PDF_RECEIPT_TAX_ID_LABEL = 'Tax ID'
+PDF_RECEIPT_LOGO_PATH = PROJECT_ROOT + '/static/images/openedx-logo-tag.png'
+# Height of the Logo in mm
+PDF_RECEIPT_LOGO_HEIGHT_MM = 12
+PDF_RECEIPT_COBRAND_LOGO_PATH = PROJECT_ROOT + '/static/images/default-theme/logo.png'
+# Height of the Co-brand Logo in mm
+PDF_RECEIPT_COBRAND_LOGO_HEIGHT_MM = 12

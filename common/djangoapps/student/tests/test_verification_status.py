@@ -21,6 +21,7 @@ from xmodule.modulestore.tests.django_utils import ModuleStoreTestCase, mixed_st
 from student.tests.factories import UserFactory, CourseEnrollmentFactory
 from course_modes.tests.factories import CourseModeFactory
 from verify_student.models import SoftwareSecurePhotoVerification  # pylint: disable=F0401
+from util.testing import UrlResetMixin
 
 
 MODULESTORE_CONFIG = mixed_store_config(settings.COMMON_TEST_DATA_ROOT, {}, include_xml=False)
@@ -33,17 +34,27 @@ MODULESTORE_CONFIG = mixed_store_config(settings.COMMON_TEST_DATA_ROOT, {}, incl
 })
 @unittest.skipUnless(settings.ROOT_URLCONF == 'lms.urls', 'Test only valid in lms')
 @ddt.ddt
-class TestCourseVerificationStatus(ModuleStoreTestCase):
+class TestCourseVerificationStatus(UrlResetMixin, ModuleStoreTestCase):
     """Tests for per-course verification status on the dashboard. """
 
     PAST = datetime.now(UTC) - timedelta(days=5)
     FUTURE = datetime.now(UTC) + timedelta(days=5)
 
+    @patch.dict(settings.FEATURES, {'SEPARATE_VERIFICATION_FROM_PAYMENT': True})
     def setUp(self):
+        # Invoke UrlResetMixin
+        super(TestCourseVerificationStatus, self).setUp('verify_student.urls')
+
         self.user = UserFactory(password="edx")
         self.course = CourseFactory.create()
         success = self.client.login(username=self.user.username, password="edx")
         self.assertTrue(success, msg="Did not log in successfully")
+
+        # Use the URL with the querystring param to put the user
+        # in the experimental track.
+        # TODO (ECOM-188): Once the A/B test of decoupling verified / payment
+        # completes, we can remove the querystring param.
+        self.dashboard_url = reverse('dashboard') + '?separate-verified=1'
 
     def test_enrolled_as_non_verified(self):
         self._setup_mode_and_enrollment(None, "honor")
@@ -87,7 +98,7 @@ class TestCourseVerificationStatus(ModuleStoreTestCase):
 
     def test_need_to_verify_expiration(self):
         self._setup_mode_and_enrollment(self.FUTURE, "verified")
-        response = self.client.get(reverse('dashboard'))
+        response = self.client.get(self.dashboard_url)
         self.assertContains(response, self.BANNER_ALT_MESSAGES[VERIFY_STATUS_NEED_TO_VERIFY])
         self.assertContains(response, "You only have 4 days left to verify for this course.")
 
@@ -117,7 +128,7 @@ class TestCourseVerificationStatus(ModuleStoreTestCase):
         self._assert_course_verification_status(VERIFY_STATUS_APPROVED)
 
         # Check that the "verification good until" date is displayed
-        response = self.client.get(reverse('dashboard'))
+        response = self.client.get(self.dashboard_url)
         self.assertContains(response, attempt.expiration_datetime.strftime("%m/%d/%Y"))
 
     def test_missed_verification_deadline(self):
@@ -188,6 +199,26 @@ class TestCourseVerificationStatus(ModuleStoreTestCase):
         # messaging relating to verification
         self._assert_course_verification_status(None)
 
+    def test_verification_will_expire_by_deadline(self):
+        # Expiration date in the future
+        self._setup_mode_and_enrollment(self.FUTURE, "verified")
+
+        # Create a verification attempt that:
+        # 1) Is current (submitted in the last year)
+        # 2) Will expire by the deadline for the course
+        attempt = SoftwareSecurePhotoVerification.objects.create(user=self.user)
+        attempt.mark_ready()
+        attempt.submit()
+
+        # This attempt will expire tomorrow, before the course deadline
+        attempt.created_at = attempt.created_at - timedelta(days=364)
+        attempt.save()
+
+        # Expect that the "verify now" message is hidden
+        # (since the user isn't allowed to submit another attempt while
+        # a verification is active).
+        self._assert_course_verification_status(None)
+
     def _setup_mode_and_enrollment(self, deadline, enrollment_mode):
         """Create a course mode and enrollment.
 
@@ -209,16 +240,27 @@ class TestCourseVerificationStatus(ModuleStoreTestCase):
 
     BANNER_ALT_MESSAGES = {
         None: "Honor",
-        VERIFY_STATUS_NEED_TO_VERIFY: "ID Verified Pending Ribbon/Badge",
-        VERIFY_STATUS_SUBMITTED: "ID Verified Pending Ribbon/Badge",
+        VERIFY_STATUS_NEED_TO_VERIFY: "ID verification pending",
+        VERIFY_STATUS_SUBMITTED: "ID verification pending",
         VERIFY_STATUS_APPROVED: "ID Verified Ribbon/Badge",
         VERIFY_STATUS_MISSED_DEADLINE: "Honor"
     }
 
     NOTIFICATION_MESSAGES = {
-        VERIFY_STATUS_NEED_TO_VERIFY: "You still need to verify for this course.",
-        VERIFY_STATUS_SUBMITTED: "Thanks for your patience as we process your request.",
-        VERIFY_STATUS_APPROVED: "You have already verified your ID!",
+        VERIFY_STATUS_NEED_TO_VERIFY: [
+            "You still need to verify for this course.",
+            "Verification not yet complete"
+        ],
+        VERIFY_STATUS_SUBMITTED: ["Thanks for your patience as we process your request."],
+        VERIFY_STATUS_APPROVED: ["You have already verified your ID!"],
+    }
+
+    MODE_CLASSES = {
+        None: "honor",
+        VERIFY_STATUS_NEED_TO_VERIFY: "verified",
+        VERIFY_STATUS_SUBMITTED: "verified",
+        VERIFY_STATUS_APPROVED: "verified",
+        VERIFY_STATUS_MISSED_DEADLINE: "honor"
     }
 
     def _assert_course_verification_status(self, status):
@@ -232,7 +274,7 @@ class TestCourseVerificationStatus(ModuleStoreTestCase):
             AssertionError
 
         """
-        response = self.client.get(reverse('dashboard'))
+        response = self.client.get(self.dashboard_url)
 
         # Sanity check: verify that the course is on the page
         self.assertContains(response, unicode(self.course.id))
@@ -240,10 +282,34 @@ class TestCourseVerificationStatus(ModuleStoreTestCase):
         # Verify that the correct banner is rendered on the dashboard
         self.assertContains(response, self.BANNER_ALT_MESSAGES[status])
 
+        # Verify that the correct banner color is rendered
+        self.assertContains(
+            response,
+            "<article class=\"course {}\">".format(self.MODE_CLASSES[status])
+        )
+
         # Verify that the correct copy is rendered on the dashboard
         if status is not None:
             if status in self.NOTIFICATION_MESSAGES:
-                self.assertContains(response, self.NOTIFICATION_MESSAGES[status])
+                # Different states might have different messaging
+                # so in some cases we check several possibilities
+                # and fail if none of these are found.
+                found_msg = False
+                for message in self.NOTIFICATION_MESSAGES[status]:
+                    if message in response.content:
+                        found_msg = True
+                        break
+
+                fail_msg = "Could not find any of these messages: {expected}".format(
+                    expected=self.NOTIFICATION_MESSAGES[status]
+                )
+                self.assertTrue(found_msg, msg=fail_msg)
         else:
-            for msg in self.NOTIFICATION_MESSAGES.values():
+            # Combine all possible messages into a single list
+            all_messages = []
+            for msg_group in self.NOTIFICATION_MESSAGES.values():
+                all_messages.extend(msg_group)
+
+            # Verify that none of the messages are displayed
+            for msg in all_messages:
                 self.assertNotContains(response, msg)

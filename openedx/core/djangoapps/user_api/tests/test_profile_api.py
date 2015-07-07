@@ -7,6 +7,7 @@ import ddt
 from django.test.utils import override_settings
 from nose.tools import raises
 from dateutil.parser import parse as parse_datetime
+from pytz import UTC
 from xmodule.modulestore.tests.factories import CourseFactory
 import datetime
 
@@ -47,7 +48,7 @@ class ProfileApiTest(TestCase):
         self.assertEqual(profile['full_name'], u'ȻħȺɍłɇs')
 
     @raises(profile_api.ProfileInvalidField)
-    @ddt.data('', 'a' * profile_api.FULL_NAME_MAX_LENGTH + 'a')
+    @ddt.data('', 'a', 'a' * profile_api.FULL_NAME_MAX_LENGTH + 'a')
     def test_update_full_name_invalid(self, invalid_name):
         account_api.create_account(self.USERNAME, self.PASSWORD, self.EMAIL)
         profile_api.update_profile(self.USERNAME, full_name=invalid_name)
@@ -167,7 +168,7 @@ class ProfileApiTest(TestCase):
         # Set year of birth
         user = User.objects.get(username=self.USERNAME)
         profile = UserProfile.objects.get(user=user)
-        year_of_birth = datetime.datetime.now().year - age  # pylint: disable=maybe-no-member
+        year_of_birth = datetime.datetime.now(UTC).year - age  # pylint: disable=maybe-no-member
         profile.year_of_birth = year_of_birth
         profile.save()
 

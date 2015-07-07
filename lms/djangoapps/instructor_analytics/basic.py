@@ -3,14 +3,18 @@ Student and course analytics.
 
 Serve miscellaneous course and student data
 """
+import json
 from shoppingcart.models import (
     PaidCourseRegistration, CouponRedemption, Invoice, CourseRegCodeItem,
     OrderTypes, RegistrationCodeRedemption, CourseRegistrationCode
 )
 from django.db.models import Q
+from django.conf import settings
 from django.contrib.auth.models import User
+from django.core.urlresolvers import reverse
 import xmodule.graders as xmgraders
 from django.core.exceptions import ObjectDoesNotExist
+from microsite_configuration import microsite
 
 
 STUDENT_FEATURES = ('id', 'username', 'first_name', 'last_name', 'is_staff', 'email')
@@ -29,7 +33,7 @@ SALE_ORDER_FEATURES = ('id', 'company_name', 'company_contact_name', 'company_co
 
 AVAILABLE_FEATURES = STUDENT_FEATURES + PROFILE_FEATURES
 COURSE_REGISTRATION_FEATURES = ('code', 'course_id', 'created_by', 'created_at')
-COUPON_FEATURES = ('course_id', 'percentage_discount', 'description')
+COUPON_FEATURES = ('code', 'course_id', 'percentage_discount', 'description', 'expiration_date', 'is_active')
 
 
 def sale_order_record_features(course_id, features):
@@ -59,7 +63,6 @@ def sale_order_record_features(course_id, features):
         """
 
         sale_order_features = [x for x in SALE_ORDER_FEATURES if x in features]
-        course_reg_features = [x for x in COURSE_REGISTRATION_FEATURES if x in features]
         order_item_features = [x for x in ORDER_ITEM_FEATURES if x in features]
 
         # Extracting order information
@@ -73,9 +76,6 @@ def sale_order_record_features(course_id, features):
         sale_order_dict.update({"logged_in_username": purchased_course.order.user.username})
         sale_order_dict.update({"logged_in_email": purchased_course.order.user.email})
 
-        sale_order_dict.update({"total_codes": 'N/A'})
-        sale_order_dict.update({'total_used_codes': 'N/A'})
-
         # Extracting OrderItem information of unit_cost, list_price and status
         order_item_dict = dict((feature, getattr(purchased_course, feature, None))
                                for feature in order_item_features)
@@ -88,22 +88,6 @@ def sale_order_record_features(course_id, features):
             order_item_dict.update({'coupon_code': ", ".join(coupon_codes)})
 
         sale_order_dict.update(dict(order_item_dict.items()))
-        if getattr(purchased_course.order, 'order_type') == OrderTypes.BUSINESS:
-            registration_codes = CourseRegistrationCode.objects.filter(order=purchased_course.order, course_id=course_id)
-            sale_order_dict.update({"total_codes": registration_codes.count()})
-            total_used_codes = RegistrationCodeRedemption.objects.filter(registration_code__in=registration_codes).count()
-            sale_order_dict.update({'total_used_codes': total_used_codes})
-
-            codes = [reg_code.code for reg_code in registration_codes]
-
-            # Extracting registration code information
-            obj_course_reg_code = registration_codes.all()[:1].get()
-            course_reg_dict = dict((feature, getattr(obj_course_reg_code, feature))
-                                   for feature in course_reg_features)
-
-            course_reg_dict['course_id'] = course_id.to_deprecated_string()
-            course_reg_dict.update({'codes': ", ".join(codes)})
-            sale_order_dict.update(dict(course_reg_dict.items()))
 
         return sale_order_dict
 
@@ -187,6 +171,15 @@ def enrolled_students_features(course_key, features):
         student_features = [x for x in STUDENT_FEATURES if x in features]
         profile_features = [x for x in PROFILE_FEATURES if x in features]
 
+        # For data extractions on the 'meta' field
+        # the feature name should be in the format of 'meta.foo' where
+        # 'foo' is the keyname in the meta dictionary
+        meta_features = []
+        for feature in features:
+            if 'meta.' in feature:
+                meta_key = feature.split('.')[1]
+                meta_features.append((feature, meta_key))
+
         student_dict = dict((feature, getattr(student, feature))
                             for feature in student_features)
         profile = student.profile
@@ -194,6 +187,11 @@ def enrolled_students_features(course_key, features):
             profile_dict = dict((feature, getattr(profile, feature))
                                 for feature in profile_features)
             student_dict.update(profile_dict)
+
+            # now featch the requested meta fields
+            meta_dict = json.loads(profile.meta) if profile.meta else {}
+            for meta_feature, meta_key in meta_features:
+                student_dict[meta_feature] = meta_dict.get(meta_key)
 
         if include_cohort_column:
             # Note that we use student.course_groups.all() here instead of
@@ -227,12 +225,15 @@ def coupon_codes_features(features, coupons_list):
         coupon_features = [x for x in COUPON_FEATURES if x in features]
 
         coupon_dict = dict((feature, getattr(coupon, feature)) for feature in coupon_features)
-        coupon_dict['code_redeemed_count'] = coupon.couponredemption_set.all().count()
+        coupon_dict['code_redeemed_count'] = coupon.couponredemption_set.filter(
+            order__status="purchased"
+        ).count()
 
         # we have to capture the redeemed_by value in the case of the downloading and spent registration
         # codes csv. In the case of active and generated registration codes the redeemed_by value will be None.
         #  They have not been redeemed yet
 
+        coupon_dict['expiration_date'] = coupon.display_expiry_date
         coupon_dict['course_id'] = coupon_dict['course_id'].to_deprecated_string()
         return coupon_dict
     return [extract_coupon(coupon, features) for coupon in coupons_list]
@@ -255,6 +256,7 @@ def course_registration_features(features, registration_codes, csv_type):
         :param features:
         :param csv_type:
         """
+        site_name = microsite.get_value('SITE_NAME', settings.SITE_NAME)
         registration_features = [x for x in COURSE_REGISTRATION_FEATURES if x in features]
 
         course_registration_dict = dict((feature, getattr(registration_code, feature)) for feature in registration_features)
@@ -269,6 +271,11 @@ def course_registration_features(features, registration_codes, csv_type):
             course_registration_dict['customer_reference_number'] = sale_invoice.customer_reference_number
             course_registration_dict['internal_reference'] = sale_invoice.internal_reference
 
+        course_registration_dict['redeem_code_url'] = 'http://{base_url}{redeem_code_url}'.format(
+            base_url=site_name,
+            redeem_code_url=reverse('register_code_redemption',
+                                    kwargs={'registration_code': registration_code.code})
+        )
         # we have to capture the redeemed_by value in the case of the downloading and spent registration
         # codes csv. In the case of active and generated registration codes the redeemed_by value will be None.
         #  They have not been redeemed yet
