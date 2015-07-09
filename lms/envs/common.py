@@ -1710,14 +1710,6 @@ PASSWORD_DICTIONARY = []
 ##################### LinkedIn #####################
 INSTALLED_APPS += ('django_openid_auth',)
 
-
-############################ LinkedIn Integration #############################
-INSTALLED_APPS += ('linkedin',)
-LINKEDIN_API = {
-    'EMAIL_WHITELIST': [],
-    'COMPANY_ID': '2746406',
-}
-
 ############################# OAI-PMH Integration #############################
 INSTALLED_APPS += ('oai',)
 
