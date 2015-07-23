@@ -24,8 +24,7 @@ class Command(BaseCommand):
         }
         auth = (options['USERNAME_LRS'], options['PASSWORD_LRS'])
 
-        #evt_list = TrackingLog.objects.filter(exported=False).filter(tincan_error='').order_by('dtcreated')[:options['EXTRACTED_EVENT_NUMBER']]
-        evt_list = TrackingLog.objects.filter(exported=False).filter(tincan_error='').order_by('dtcreated')[:10000]
+        evt_list = TrackingLog.objects.filter(exported=False).filter(tincan_error='').order_by('dtcreated')[:options['EXTRACTED_EVENT_NUMBER']]
         for evt in evt_list:
             resp = requests.post(options['URL'], data=evt.statement, auth=auth, headers=headers)
             try:
@@ -33,7 +32,7 @@ class Command(BaseCommand):
                 answer = json.loads(resp.content)
                 if answer['result'].lower() != 'ok':
                     evt.tincan_error = resp.content
-                    print answer # uncomment for debug
+                    #print answer # uncomment for debug
                 else:
                     evt.tincan_key = resp.content
                     evt.exported = True

@@ -154,6 +154,7 @@ class XapiBackend(BaseBackend):
             self.course_ids.add(c)
         """
         self.base_url = options.get('BASE_URL', 'https://www.pok.polimi.it')
+        self.homepage_url = options.get('HOMEPAGE_URL', '')
         self.oai_prefix = options.get('OAI_PREFIX', '')
         self.name = name
 
@@ -544,7 +545,7 @@ class XapiBackend(BaseBackend):
         elif re.match('^/courses/.*', evt['event_type']):
             action = None
         else:
-            print '-> EVENT NOT MANAGED: ', evt['event_type'] # Uncomment for debug
+            #print '-> EVENT NOT MANAGED: ', evt['event_type'] # Uncomment for debug
             evt['time'] = evt['time'].strftime("%Y-%m-%dT%H:%M:%S")
             action = evt
 
@@ -558,7 +559,7 @@ class XapiBackend(BaseBackend):
         actor = {
             "objectType": "Agent",
             "account": {
-                "homePage": "https://portal.ecolearning.eu?user=%s" % usereco.uid,
+                "homePage": "%s%s" % (self.homepage_url, usereco.uid),
                 "name": usereco.uid
             }
         }
