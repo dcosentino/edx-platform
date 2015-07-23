@@ -136,47 +136,35 @@ class XapiBackend(BaseBackend):
         super(XapiBackend, self).__init__(**options)
 
         self.course_ids = set(options.get('ID_COURSES', []))
-        for c in [
-                'Polimi/GestConf101/2014_T1',
-                'course-v1:Polimi+FIS102+2014_M11',
-                'course-v1:Polimi+FIS102+2015', 
-                'course-v1:Polimi+MAT101+2015', 
-                'course-v1:Polimi+FIS101+2014_M12', 
-                'Polimi/MAT101/2014_T2',
-                'Polimi/FinAccount101/2014_T2',
-                'course-v1%3APolimi%2BMAT101%2B2015_M4/courseware/WF',
-                'course-v1:Polimi+FinAccount101+2015_M1',
-                'course-v1%3APolimi%2BMAT101%2B2015_M4/courseware/W3',
-                'course-v1%3APolimi%2BFIS102%2B2015_M4/courseware/W2',
-                'course-v1:Polimi+FIS101+2014_M11',
-                'course-v1:Polimi+GestCamb101+2015_M4',
-                'course-v1:Polimi+FIS101+2015', 
-                'course-v1:Polimi+FIS102+2014_M12',
-                'course-v1:Polimi+GestConf101+2015_M4',
-                'course-v1:Polimi+GestConf101+2014_M12',
-                'course-v1:Polimi+MAT101+2014_M11', 
-                'course-v1:Polimi+MAT101+2014_M12',
-                'course-v1:Polimi+MAT101+2015_M2',
-                'course-v1:Polimi+MAT101+2015_M4',
-                'course-v1:Polimi+FIS101+2015_M2',
-                'course-v1:Polimi+FIS101+2015_M4',
-                'course-v1:Polimi+FIS102+2015_M4',
-                'course-v1:Polimi+MANCHAN101+2015_M4', 
-                'course-v1:Polimi+FinAccount101+2015_M6',
-                'course-v1:Polimi+FinAccount101+2015_M6',
-                'course-v1:polimi+finaccount101+2015_m4',
-                'course-v1:Polimi+FinAccount101+2015_M4',
-                'Polimi/FIS101/2014_T2',
-                'course-v1:Polimi+GestConf101+2015_M2',
-        ]:
+        """
+        TEST_COURSES = [
+                'Polimi/GestConf101/2014_T1', 'course-v1:Polimi+FIS102+2014_M11', 'course-v1:Polimi+FIS102+2015', 
+                'course-v1:Polimi+MAT101+2015', 'course-v1:Polimi+FIS101+2014_M12', 'Polimi/MAT101/2014_T2',
+                'Polimi/FinAccount101/2014_T2', 'course-v1%3APolimi%2BMAT101%2B2015_M4/courseware/WF', 'course-v1:Polimi+FinAccount101+2015_M1',
+                'course-v1%3APolimi%2BMAT101%2B2015_M4/courseware/W3', 'course-v1%3APolimi%2BFIS102%2B2015_M4/courseware/W2',
+                'course-v1:Polimi+FIS101+2014_M11', 'course-v1:Polimi+GestCamb101+2015_M4', 'course-v1:Polimi+FIS101+2015', 
+                'course-v1:Polimi+FIS102+2014_M12', 'course-v1:Polimi+GestConf101+2015_M4', 'course-v1:Polimi+GestConf101+2014_M12',
+                'course-v1:Polimi+MAT101+2014_M11', 'course-v1:Polimi+MAT101+2014_M12', 'course-v1:Polimi+MAT101+2015_M2',
+                'course-v1:Polimi+MAT101+2015_M4', 'course-v1:Polimi+FIS101+2015_M2', 'course-v1:Polimi+FIS101+2015_M4',
+                'course-v1:Polimi+FIS102+2015_M4', 'course-v1:Polimi+MANCHAN101+2015_M4', 'course-v1:Polimi+FinAccount101+2015_M6',
+                'course-v1:Polimi+FinAccount101+2015_M6', 'course-v1:polimi+finaccount101+2015_m4', 'course-v1:Polimi+FinAccount101+2015_M4',
+                'Polimi/FIS101/2014_T2', 'course-v1:Polimi+GestConf101+2015_M2',
+        ]
+        for c in TEST_COURSES:
             self.course_ids.add(c)
-        self.base_url = options.get('BASE_URL', '')
+        """
+        self.base_url = options.get('BASE_URL', 'https://www.pok.polimi.it')
         self.oai_prefix = options.get('OAI_PREFIX', '')
         self.name = name
 
 
-    # Vedi https://github.com/adlnet/edx-xapi-bridge/blob/master/xapi-bridge/converter.py
+    # See https://github.com/adlnet/edx-xapi-bridge/blob/master/xapi-bridge/converter.py
     def to_xapi(self, evt, course_id):
+        def fix_id(base_url, obj_id):
+            if not obj_id.startswith("https"):
+                return base_url + obj_id
+            return obj_id
+
         #evt['time'] = evt['time'].strftime("%Y-%m-%dT%H:%M:%S")
         #return evt
         action = {}
@@ -184,14 +172,12 @@ class XapiBackend(BaseBackend):
         
         usereco = self.get_actor(evt['context']['user_id'])
           
-        #print evt['event_type'], evt['event_source'] # TODO: delete
-
         if re.match('^/courses/.*/info/?', evt['event_type']) or re.match('^/courses/.*/about/?', evt['event_type']):
             # Learner accesses MOOC
             action = EDX2TINCAN['learner_accesses_MOOC']
             obj = {
                 "objectType": "Activity",
-                "id": self.base_url + evt['event_type'], 
+                "id": fix_id(self.base_url, evt['event_type']), 
                 "definition": {
                     "name": { "en-US": self.oai_prefix + course_id },
                     "type": "http://adlnet.gov/expapi/activities/course"
@@ -205,13 +191,12 @@ class XapiBackend(BaseBackend):
             module = evt['event_type'].split('/')[-2:][0]
             obj = {
                 "objectType": "Activity",
-                "id": self.base_url + evt['context']['path'],
+                "id": fix_id(self.base_url, evt['context']['path']),
                 "definition": {
                     "name": { "en-US": module },
                     "type": "http://adlnet.gov/expapi/activities/module"
                 }
             }
-
 
         elif re.match('/courses[/\w]+/wiki/\w+/_create/?', evt['event_type']):
             title = None
@@ -224,7 +209,7 @@ class XapiBackend(BaseBackend):
                 action = EDX2TINCAN['learner_creates_wiki_page']
                 obj = {
                     "objectType": "Activity",
-                    "id": self.base_url + evt['context']['path'],
+                    "id": fix_id(self.base_url, evt['context']['path']),
                     "definition": {
                         "name": { "en-US": title },
                         "type": "http://www.ecolearning.eu/expapi/activitytype/wiki"
@@ -245,7 +230,7 @@ class XapiBackend(BaseBackend):
                 action = EDX2TINCAN['learner_edits_wiki_page']
                 obj = {
                     "objectType": "Activity",
-                    "id": self.base_url + evt['context']['path'],
+                    "id": fix_id(self.base_url, evt['context']['path']),
                     "definition": {
                         "name": { "en-US": title },
                         "type": "http://www.ecolearning.eu/expapi/activitytype/wiki"
@@ -258,7 +243,7 @@ class XapiBackend(BaseBackend):
             action = EDX2TINCAN['learner_accesses_wiki_page']
             obj = {
                 "objectType": "Activity",
-                "id": self.base_url + evt['context']['path'],
+                "id": fix_id(self.base_url, evt['context']['path']),
                 "definition": {
                     "name": { "en-US": evt['context']['path'] },
                     "type": "http://www.ecolearning.eu/expapi/activitytype/wiki"
@@ -268,7 +253,7 @@ class XapiBackend(BaseBackend):
             action = EDX2TINCAN['learner_accesses_wiki']
             obj = {
                 "objectType": "Activity",
-                "id": self.base_url + evt['context']['path'],
+                "id": fix_id(self.base_url, evt['context']['path']),
                 "definition": {
                     "name": { "en-US": evt['context']['path'] },
                     "type": "http://www.ecolearning.eu/expapi/activitytype/wiki"
@@ -280,7 +265,7 @@ class XapiBackend(BaseBackend):
             action = EDX2TINCAN['learner_accesses_assessment']
             obj = {
                 "objectType": "Activity",
-                "id": self.base_url + evt['context']['path'], # TODO: cosa ci mettiamo? non sembra ci sia nient'altro di utile
+                "id": fix_id(self.base_url, evt['context']['path']), # TODO: cosa ci mettiamo? non sembra ci sia nient'altro di utile
                 # Il self.path è stato aggiunto per poter risolvere l'errore "id is not a valid IRI in object" ricevuto dall'LRS
                 "definition": {
                     "name": { "en-US": evt['context']['path'] },
@@ -292,7 +277,7 @@ class XapiBackend(BaseBackend):
             action = EDX2TINCAN['learner_answers_question']
             obj = {
                 "objectType": "Activity",
-                "id": evt['event']['problem_id'],
+                "id": fix_id(self.base_url, evt['event']['problem_id']),
                 "definition": {
                     "name": { "en-US": evt['context']['module']['display_name'] },
                     "type": "http://adlnet.gov/expapi/activities/question"
@@ -300,11 +285,11 @@ class XapiBackend(BaseBackend):
             }
         # TODO; messo perché non vedo quello lato server nei log...
         elif evt['event_type'] == 'problem_check' and evt['event_source'] == 'browser':
-            #print evt
             action = EDX2TINCAN['learner_answers_question']
             obj = {
                 "objectType": "Activity",
-                "id": evt['event'], #['problem_id'],
+                #"id": fix_id(self.base_url, evt['event']), #['problem_id'],
+                "id": fix_id(self.base_url,  evt['page']), #['problem_id'],
                 "definition": {
                     "name": { "en-US": evt['page'] },
                     "type": "http://adlnet.gov/expapi/activities/question"
@@ -320,7 +305,7 @@ class XapiBackend(BaseBackend):
                 event = json.loads(evt['event']) # We need to do this because we receive a string instead than a dictionary
                 obj = {
                     "objectType": "Activity",
-                    "id": evt['page'],
+                    "id": fix_id(self.base_url, evt['page']),
                     "definition": {
                         "name": { "en-US": event['id'] },
                         "type": "http://activitystrea.ms/schema/1.0/video"
@@ -334,7 +319,7 @@ class XapiBackend(BaseBackend):
                 event = json.loads(evt['event']) # We need to do this because we receive a string instead than a dictionary
                 obj = {
                     "objectType": "Activity",
-                    "id": evt['page'],
+                    "id": fix_id(self.base_url, evt['page']),
                     "definition": {
                         "name": { "en-US": event['id'] },
                         "type": "http://activitystrea.ms/schema/1.0/video"
@@ -356,11 +341,12 @@ class XapiBackend(BaseBackend):
             except:
                 pass
             if title:
-
+                if type(title) == list:
+                    title = title[0]
                 action = EDX2TINCAN['learner_post_new_forum_thread']
                 obj = {
                     "objectType": "Activity",
-                    "id": self.base_url + evt['context']['path'],
+                    "id": fix_id(self.base_url, evt['context']['path']),
                     "definition": {
                         "name": { "en-US": title },
                         "type": "http://www.ecolearning.eu/expapi/activitytype/wiki"
@@ -374,7 +360,7 @@ class XapiBackend(BaseBackend):
             action = EDX2TINCAN['learner_replies_to_forum_message']
             obj = {
                 "objectType": "Activity",
-                "id": self.base_url + evt['context']['path'],
+                "id": fix_id(self.base_url, evt['context']['path']),
                 "definition": {
                     "name": { "en-US": evt['event_type'].split('reply')[0] },
                     "type": "http://www.ecolearning.eu/expapi/activitytype/wiki"
@@ -386,7 +372,7 @@ class XapiBackend(BaseBackend):
             action = EDX2TINCAN['learner_liked_forum_message']
             obj = {
                 "objectType": "Activity",
-                "id": self.base_url + evt['context']['path'],
+                "id": fix_id(self.base_url, evt['context']['path']),
                 "definition": {
                     "name": { "en-US": evt['event_type'].split('upvote')[0] },
                     "type": "http://www.ecolearning.eu/expapi/activitytype/wiki"
@@ -398,7 +384,7 @@ class XapiBackend(BaseBackend):
             action = EDX2TINCAN['learner_reads_forum_message']
             obj = {
                 "objectType": "Activity",
-                "id": self.base_url + evt['context']['path'],
+                "id": fix_id(self.base_url, evt['context']['path']),
                 "definition": {
                     "name": { "en-US": evt['event_type'] },
                     "type": "http://www.ecolearning.eu/expapi/activitytype/wiki"
@@ -410,7 +396,7 @@ class XapiBackend(BaseBackend):
             action = EDX2TINCAN['learner_accesses_forum']
             obj = {
                 "objectType": "Activity",
-                "id": self.base_url + evt['context']['path'],
+                "id": fix_id(self.base_url, evt['context']['path']),
                 "definition": {
                     "name": { "en-US": evt['event_type'] }, 
                     "type": "http://www.ecolearning.eu/expapi/activitytype/wiki"
@@ -426,7 +412,7 @@ class XapiBackend(BaseBackend):
             action = EDX2TINCAN['learner_accesses_peer_assessment']
             obj = {
                 "objectType": "Activity",
-                "id": self.base_url + evt['context']['path'],
+                "id": fix_id(self.base_url, evt['context']['path']),
                 "definition": {
                     "name": { "en-US": evt['event_type'].split('render_peer_assessment')[0] },
                     "type": "http://www.ecolearning.eu/expapi/activitytype/peerassessment"
@@ -438,7 +424,7 @@ class XapiBackend(BaseBackend):
             action = EDX2TINCAN['learner_submits_assessment']
             obj = {
                 "objectType": "Activity",
-                "id": self.base_url + evt['context']['path'],
+                "id": fix_id(self.base_url, evt['context']['path']),
                 "definition": {
                     "name": { "en-US": evt['event_type'].split('submit')[0] },
                     "type": "http://www.ecolearning.eu/expapi/activitytype/peerassessment"
@@ -450,7 +436,7 @@ class XapiBackend(BaseBackend):
             action = EDX2TINCAN['learner_submits_peer_feedback']
             obj = {
                 "objectType": "Activity",
-                "id": self.base_url + evt['context']['path'],
+                "id": fix_id(self.base_url, evt['context']['path']),
                 "definition": {
                     "name": { "en-US": evt['event_type'].split('peer_assess')[0] },
                     "type": "http://www.ecolearning.eu/expapi/activitytype/peerassessment"
@@ -462,7 +448,7 @@ class XapiBackend(BaseBackend):
             action = EDX2TINCAN['learner_submits_peer_product']
             obj = {
                 "objectType": "Activity",
-                "id": self.base_url + evt['context']['path'],
+                "id": fix_id(self.base_url, evt['context']['path']),
                 "definition": {
                     "name": { "en-US": evt['event_type'].split('self_assess')[0] },
                     "type": "http://www.ecolearning.eu/expapi/activitytype/peerassessment"
@@ -555,12 +541,13 @@ class XapiBackend(BaseBackend):
             action = None
         elif re.search('jump_to_id', evt['event_type']):
             action = None
-
+        elif re.match('^/courses/.*', evt['event_type']):
+            action = None
         else:
-            # Only for test and debug
-            print '-> EVENT NOT MANAGED: ', evt['event_type']
+            print '-> EVENT NOT MANAGED: ', evt['event_type'] # Uncomment for debug
             evt['time'] = evt['time'].strftime("%Y-%m-%dT%H:%M:%S")
             action = evt
+
         return action, obj
 
     def get_actor(self, username):
@@ -586,7 +573,6 @@ class XapiBackend(BaseBackend):
                 event = json.loads(event_edx['event']) # We need to do this because we receive a string instead than a dictionary
                 course_id = event['POST'].get('course_id', None)[0]
             except:
-                #print 'No event data, skipping : ', event_edx
                 pass # No event data, just skip
 
         if course_id in self.course_ids:
@@ -623,4 +609,5 @@ class XapiBackend(BaseBackend):
                 log.exception(e)
         else:
             if course_id != '':
-                print 'Course not activated', course_id
+                #print 'Course not activated', course_id # Uncomment for debug
+                pass

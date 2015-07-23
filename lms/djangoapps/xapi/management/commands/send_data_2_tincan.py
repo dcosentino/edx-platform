@@ -24,28 +24,20 @@ class Command(BaseCommand):
         }
         auth = (options['USERNAME_LRS'], options['PASSWORD_LRS'])
 
-        evt_list = TrackingLog.objects.filter(exported=False).filter(tincan_error='').order_by('dtcreated')[:options['EXTRACTED_EVENT_NUMBER']]
+        #evt_list = TrackingLog.objects.filter(exported=False).filter(tincan_error='').order_by('dtcreated')[:options['EXTRACTED_EVENT_NUMBER']]
+        evt_list = TrackingLog.objects.filter(exported=False).filter(tincan_error='').order_by('dtcreated')[:10000]
         for evt in evt_list:
             resp = requests.post(options['URL'], data=evt.statement, auth=auth, headers=headers)
             try:
+                evt.tincan_key = ''
                 answer = json.loads(resp.content)
-                if answer['success'] == False:
+                if answer['result'].lower() != 'ok':
                     evt.tincan_error = resp.content
+                    print answer # uncomment for debug
+                else:
+                    evt.tincan_key = resp.content
+                    evt.exported = True
             except:
-                evt.tincan_key = resp.content
-                evt.exported = True
+                evt.tincan_error = resp.content
             evt.save()
         self.stdout.write('Data sent\n')
-
-
-
-
-
-
-
-
-
-data = """{"actor": {"objectType": "Agent","account": {"homePage": "https://portal.ecolearning.eu?user=5493fa84cd35f8064e81bcfd","name": "5493fa84cd35f8064e81bcfd"}}, "verb": {"id": "http://activitystrea.ms/schema/1.0/watch","display": {"en-US": "Indicates the learner has watched video xyz"}},
-"object": {"objectType": "Activity","id": "http://eco/resourceABC.html","definition": {"name": {"en-US": "Learn something new"},"description": {"en-US": "This is a video about ABC"},"type": "http://activitystrea.ms/schema/1.0/video"}}}"""
-
-
