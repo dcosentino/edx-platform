@@ -45,7 +45,7 @@ class Command(BaseCommand):
                 #print 'Data error -> ',  event['time']
                 continue
                                            
-            event['context']['user_id'] = 6 # used only for local test, comment in the real environment QUI
+            #event['context']['user_id'] = 6 # used only for local test, comment in the real environment
             event['time'] = dt
             user_id = event['context']['user_id']
             if user_id == '':
